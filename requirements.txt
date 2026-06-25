@@ -1,0 +1,5 @@
+ortools>=9.8
+pandas>=2.0
+numpy>=1.24
+streamlit>=1.30
+ics>=0.7
