@@ -2,10 +2,9 @@
 
 Run with:  streamlit run app.py
 
-Designed for non-technical IEOR staff. Two ways to load data:
-  1. Generate demo data to try the tool immediately.
-  2. Upload the three CSVs collected from intake forms.
-Then set the meeting length, click Match, review schedules, and download.
+Designed for non-technical IEOR staff. The workflow runs left to right across the
+tabs: read the Overview, lay out the two visit days, collect student preferences
+and faculty availability via Google Forms, then build the optimal schedule.
 """
 
 import os
@@ -19,129 +18,762 @@ import streamlit as st
 from config import Config
 from synthetic import generate
 from model import solve
-from grid import build_grid
 from run import render_schedules, compute_metrics
+from visit_days import Block, default_plans, build_grid_from_plans
 
-st.set_page_config(page_title="Visit-Day Matching", layout="wide")
-st.title("Visit-Day Faculty Matching")
-st.caption(
-    "Match prospective students with the faculty they most want to meet across the two visit days."
+HERE = os.path.dirname(os.path.abspath(__file__))
+LOGO = os.path.join(HERE, "assets", "logo.png")
+ROSTER_XLSX = os.path.join(HERE, "IEOR_Faculty_Roster.xlsx")
+
+# Berkeley IEOR palette
+NAVY = "#002677"
+NAVY_MID = "#1a4672"
+GOLD = "#fdb517"
+GOLD_SOFT = "#ffe3a3"
+BAND = "#edf3f6"
+INK = "#12100b"
+
+st.set_page_config(page_title="Visit-Day Matching", layout="wide", page_icon=LOGO)
+
+st.markdown(
+    f"""
+    <style>
+      /* base type: comfortable, not oversized */
+      html, body, [class*="css"], .stMarkdown, p, label, .stCaption {{ font-size: 0.96rem; }}
+      .block-container {{ padding-top: 2.4rem; max-width: 1040px; }}
+      h1, h2, h3, h4 {{ color: {NAVY}; font-weight: 700; letter-spacing: -0.01em; }}
+      p {{ line-height: 1.55; }}
+
+      /* hide the (now empty) sidebar entirely */
+      section[data-testid="stSidebar"] {{ display: none; }}
+
+      /* tab bar: roomier, clearer active state */
+      .stTabs [data-baseweb="tab-list"] {{ gap: 0.4rem; border-bottom: 2px solid {BAND}; }}
+      .stTabs [data-baseweb="tab"] {{ font-size: 0.96rem; font-weight: 600; padding: 0.5rem 0.9rem; }}
+      .stTabs [aria-selected="true"] {{ color: {NAVY}; }}
+
+      .stButton > button[kind="primary"] {{
+        background: {GOLD}; color: {INK}; border: none; font-weight: 700;
+        border-radius: 10px; padding: 0.55rem 1.4rem; font-size: 0.98rem;
+      }}
+      .stButton > button[kind="primary"]:hover {{ background: #e7a40e; color: {INK}; }}
+      .stButton > button[kind="secondary"] {{ border-radius: 10px; font-weight: 600; }}
+      /* keep button labels on one line (e.g. the Remove buttons) */
+      .stButton > button {{ white-space: nowrap; }}
+
+      /* numbered step headers */
+      .step {{ color: {NAVY}; font-size: 1.3rem; font-weight: 700; margin: 1.5rem 0 0.6rem; }}
+      .step span {{
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 1.75rem; height: 1.75rem; margin-right: 0.55rem; border-radius: 50%;
+        background: {NAVY}; color: #fff; font-size: 0.95rem;
+      }}
+
+      /* result stat cards */
+      .cardrow {{ display: flex; gap: 1.1rem; margin: 0.5rem 0 1.5rem; }}
+      .card {{
+        flex: 1; border-radius: 16px; padding: 1.2rem 1.4rem; color: #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+      }}
+      .card.navy {{ background: {NAVY}; }}
+      .card.gold {{ background: {GOLD}; color: {INK}; }}
+      .card .label {{ font-size: 0.92rem; opacity: 0.9; font-weight: 600; }}
+      .card .value {{ font-size: 2.3rem; font-weight: 800; line-height: 1.1; margin-top: 0.2rem; }}
+      .card.navy .value {{ color: {GOLD}; }}
+
+      .tag {{
+        display: inline-block; background: {GOLD_SOFT}; color: {NAVY};
+        border-radius: 6px; padding: 0.2rem 0.65rem; font-size: 0.88rem; font-weight: 700;
+      }}
+
+      /* branded confirmation notice */
+      .notice {{
+        background: {BAND}; border-left: 4px solid {GOLD}; color: {NAVY};
+        border-radius: 10px; padding: 0.75rem 1rem; font-weight: 600;
+        font-size: 0.96rem; margin: 0.7rem 0;
+      }}
+
+      /* overview cards: numbered, generous, friendly */
+      .ov {{
+        display: flex; gap: 1rem; align-items: flex-start;
+        background: #fff; border: 1px solid {BAND}; border-radius: 14px;
+        padding: 1.1rem 1.3rem; margin: 0.8rem 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      }}
+      .ov .num {{
+        flex: none; display: inline-flex; align-items: center; justify-content: center;
+        width: 2.2rem; height: 2.2rem; border-radius: 50%;
+        background: {NAVY}; color: {GOLD}; font-weight: 800; font-size: 1.1rem;
+      }}
+      .ov h4 {{ margin: 0.1rem 0 0.3rem; font-size: 1.08rem; }}
+      .ov p {{ color: {INK}; margin: 0; font-size: 0.97rem; line-height: 1.55; }}
+
+      /* soft divider used to break sections without heavy lines */
+      .rule {{ border: none; border-top: 1px solid {BAND}; margin: 1.5rem 0; }}
+
+      /* scrollable day timeline (Build visit days + Faculty availability) */
+      .tl {{
+        border: 1px solid {BAND}; border-radius: 14px; padding: 0.5rem 0.6rem;
+        max-height: 360px; overflow-y: auto; background: #fff;
+      }}
+      .tl-row {{ display: flex; align-items: stretch; gap: 0.7rem; margin: 0.15rem 0; }}
+      .tl-time {{
+        flex: none; width: 5.2rem; text-align: right; padding: 0.5rem 0;
+        color: {NAVY_MID}; font-size: 0.86rem; font-variant-numeric: tabular-nums;
+      }}
+      .tl-bar {{
+        flex: 1; border-radius: 9px; padding: 0.5rem 0.85rem;
+        font-size: 0.92rem; font-weight: 600; display: flex; align-items: center;
+      }}
+      .tl-open {{ background: {BAND}; color: {NAVY}; }}
+      .tl-block {{ background: {GOLD_SOFT}; color: {INK}; }}
+      .tl-meet {{ background: {NAVY}; color: #fff; }}
+      .tl-free {{ background: #e9f3ec; color: #1c6b3f; }}
+      .tl-busy {{ background: #f4f5f7; color: #8a8f98; }}
+      .tl-tag {{
+        margin-left: auto; font-size: 0.74rem; font-weight: 700; opacity: 0.85;
+        text-transform: uppercase; letter-spacing: 0.03em;
+      }}
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
-# --- sidebar: settings ---
-st.sidebar.header("Settings")
-meeting_min = st.sidebar.number_input("Meeting length (minutes)", 5, 60, 20, step=5)
-buffer_min = st.sidebar.number_input("Buffer between meetings (minutes)", 0, 30, 5, step=5)
-day_start = st.sidebar.text_input("Day start", "09:00")
-day_end = st.sidebar.text_input("Day end", "17:00")
-time_limit = st.sidebar.slider("Solver time limit (seconds)", 5, 120, 30)
 
-st.sidebar.markdown("---")
-st.sidebar.caption(
-    f"Each meeting occupies a {meeting_min + buffer_min}-minute slot. "
-    "Faculty stay in their offices; students travel between them."
+def step(n, text):
+    st.markdown(f'<div class="step"><span>{n}</span>{text}</div>', unsafe_allow_html=True)
+
+
+def notice(text):
+    st.markdown(f'<div class="notice">{text}</div>', unsafe_allow_html=True)
+
+
+def rule():
+    st.markdown('<hr class="rule">', unsafe_allow_html=True)
+
+
+def _tl_row(time_label, css, text, tag=""):
+    tag_html = f'<span class="tl-tag">{tag}</span>' if tag else ""
+    return (f'<div class="tl-row"><div class="tl-time">{time_label}</div>'
+            f'<div class="tl-bar {css}">{text}{tag_html}</div></div>')
+
+
+def render_day_timeline(plan):
+    """Scrollable timeline of one day: open meeting windows and blocked events,
+    in chronological order. Used in Build visit days."""
+    items = []
+    for blk in plan.blocks:
+        items.append((blk.start, blk.end, "block", blk.label))
+    # open windows are the gaps between blocks within day hours
+    busy = sorted(((b.start, b.end) for b in plan.blocks))
+    cur = plan.start
+    for bs, be in busy:
+        if cur < bs:
+            items.append((cur, bs, "open", "Open for meetings"))
+        cur = max(cur, be)
+    if cur < plan.end:
+        items.append((cur, plan.end, "open", "Open for meetings"))
+    items.sort()
+
+    rows = "".join(
+        _tl_row(f"{s}-{e}", "tl-open" if kind == "open" else "tl-block",
+                label, "open" if kind == "open" else "blocked")
+        for s, e, kind, label in items
+    )
+    st.markdown(f'<div class="tl">{rows or "<em>No hours set.</em>"}</div>',
+                unsafe_allow_html=True)
+
+
+def render_availability_timeline(grid, free_windows):
+    """Scrollable timeline of one faculty's availability across the grid days.
+    free_windows is a set of 'HH:MM-HH:MM' strings the faculty checked, per day."""
+    for day in sorted(grid["day"].unique()):
+        st.markdown(f"**Day {int(day)}**")
+        day_slots = grid[grid["day"] == day]
+        rows = ""
+        for r in day_slots.itertuples():
+            win = f"{r.start_time}-{r.end_time}"
+            free = win in free_windows
+            rows += _tl_row(
+                win, "tl-free" if free else "tl-busy",
+                "Available" if free else "Not available",
+                "free" if free else "busy",
+            )
+        st.markdown(f'<div class="tl">{rows or "<em>No slots.</em>"}</div>',
+                    unsafe_allow_html=True)
+
+
+# --- header ---
+# Embed the logo as inline HTML so the browser scales the full-resolution source
+# itself (st.image rasterizes at the display width and looks blurry on Retina).
+if os.path.exists(LOGO):
+    import base64
+    with open(LOGO, "rb") as _f:
+        _logo_b64 = base64.b64encode(_f.read()).decode()
+    st.markdown(
+        f'<img src="data:image/png;base64,{_logo_b64}" '
+        'style="width:230px; height:auto; display:block; margin:0 0 0.2rem;" '
+        'alt="Berkeley IEOR">',
+        unsafe_allow_html=True,
+    )
+st.markdown(
+    f"<h1 style='margin:0.5rem 0 0; font-size:2.1rem;'>Visit-Day Faculty Matching</h1>"
+    f"<p style='color:{NAVY_MID}; margin:0.3rem 0 0.6rem; font-size:1.05rem;'>"
+    "Schedule prospective student meetings with the faculty they most want to meet.</p>"
+    f"<hr style='border:none; border-top:2px solid {BAND}; margin:0.9rem 0 0.4rem;'>",
+    unsafe_allow_html=True,
 )
+
+# Slot-sizing and solver settings live inside their relevant tabs (no sidebar).
+# They persist in session state so make_config() can read them from anywhere.
+st.session_state.setdefault("meeting_min", 20)
+st.session_state.setdefault("buffer_min", 5)
+st.session_state.setdefault("time_limit", 30)
 
 
 def make_config():
     return Config(
-        meeting_minutes=meeting_min,
-        buffer_minutes=buffer_min,
-        day_start=day_start,
-        day_end=day_end,
-        solver_time_limit_s=time_limit,
+        meeting_minutes=st.session_state["meeting_min"],
+        buffer_minutes=st.session_state["buffer_min"],
+        solver_time_limit_s=st.session_state["time_limit"],
     )
 
 
-# --- data source ---
-st.subheader("1. Load data")
-source = st.radio(
-    "Where should the data come from?",
-    ["Generate demo data", "Upload CSV files"],
-    horizontal=True,
-)
+def get_plans():
+    """The visit-day structure, defaulting to two 9-5 days with lunch."""
+    if "plans" not in st.session_state:
+        st.session_state["plans"] = default_plans()
+    return st.session_state["plans"]
 
-faculty = availability = preferences = None
-cfg = make_config()
-grid = build_grid(cfg)
 
-if source == "Generate demo data":
-    c1, c2 = st.columns(2)
-    n_fac = c1.number_input("Number of faculty", 3, 60, 15)
-    n_stu = c2.number_input("Number of students", 3, 120, 25)
-    demo_cfg = make_config()
-    demo_cfg.num_faculty = int(n_fac)
-    demo_cfg.num_students = int(n_stu)
-    faculty, availability, preferences, grid = generate(demo_cfg)
-    cfg = demo_cfg
-    st.success(f"Generated {len(faculty)} faculty and {n_stu} students on a {len(grid)}-slot grid.")
-else:
+def get_grid():
+    """Grid built from the staff-defined visit-day structure."""
+    return build_grid_from_plans(get_plans(), make_config())
+
+
+tabs = st.tabs([
+    "Overview",
+    "Build visit days",
+    "Prospective students",
+    "Faculty availability",
+    "Build schedules",
+])
+
+
+# =====================================================================
+# TAB 1 - OVERVIEW
+# =====================================================================
+with tabs[0]:
+    st.markdown(
+        "<p style='font-size:1.15rem;'>Welcome. This tool helps the IEOR staff give "
+        "every prospective graduate student a personalized two-day schedule of meetings "
+        "with the faculty they most want to meet. You do not need any technical "
+        "background to use it. Just work through the four tabs in order, left to right, "
+        "and the tool handles the scheduling for you.</p>",
+        unsafe_allow_html=True,
+    )
+    rule()
+    st.markdown("<h3>How it works, step by step</h3>", unsafe_allow_html=True)
+
+    cards = [
+        ("Build visit days",
+         "Start here. Tell the tool how each of the two visit days is laid out: what "
+         "time the day starts, what time it ends, and any blocks of time that are not "
+         "for meetings, such as a lunch break, a welcome session, or a campus tour. "
+         "Everything you do not block off becomes available time that the tool can use "
+         "to schedule student-faculty meetings. You will see a live preview of how many "
+         "meeting slots each day has as you make changes."),
+        ("Prospective students",
+         "Next, collect each student's preferences. Upload a simple spreadsheet (CSV) "
+         "listing the incoming students and their email addresses. The tool builds a "
+         "Google Form that asks each student to rank the faculty they would most like "
+         "to meet and to choose their research interests. You can preview the exact form "
+         "before sending, then email it to everyone at once. Their answers collect "
+         "automatically in a linked Google Sheet."),
+        ("Faculty availability",
+         "Now find out when each faculty member is free. Upload a spreadsheet (CSV) of "
+         "faculty and their emails, or load the IEOR roster directly. The tool builds a "
+         "second Google Form that shows each faculty the exact time windows from your "
+         "visit-day setup and asks them to check off when they can take meetings. Preview "
+         "it, then send it to all faculty at once."),
+        ("Build schedules",
+         "Finally, generate the schedules. The tool takes everything you have collected, "
+         "the students' ranked preferences, each faculty member's availability, and your "
+         "visit-day structure, and works out the best possible two-day schedule for every "
+         "student. It aims to give each student as many of their top-choice meetings as "
+         "possible while making sure no one is left out. You can review the results by "
+         "student or by faculty and download them as a spreadsheet."),
+    ]
+    for i, (title, body) in enumerate(cards, start=1):
+        st.markdown(
+            f'<div class="ov"><div class="num">{i}</div>'
+            f'<div><h4>{title}</h4><p>{body}</p></div></div>',
+            unsafe_allow_html=True,
+        )
+
+
+# =====================================================================
+# TAB 2 - BUILD VISIT DAYS: per-day hours + blocked events
+# =====================================================================
+def render_visit_days():
+    plans = get_plans()
+
+    step(1, "Set how long each meeting lasts")
     st.caption(
-        "Upload three files. faculty.csv (faculty_id, name, area), "
-        "availability.csv (faculty_id, slot_id), preferences.csv (student_id, faculty_id, rank)."
+        "This decides how many meetings fit in a day. The buffer is travel and reset "
+        "time between meetings."
     )
-    fac_f = st.file_uploader("faculty.csv", type="csv")
-    avail_f = st.file_uploader("availability.csv", type="csv")
-    pref_f = st.file_uploader("preferences.csv", type="csv")
-    if fac_f and avail_f and pref_f:
-        faculty = pd.read_csv(fac_f)
-        availability = pd.read_csv(avail_f)
-        preferences = pd.read_csv(pref_f)
-        st.success("Files loaded.")
+    s1, s2 = st.columns(2)
+    st.session_state["meeting_min"] = s1.number_input(
+        "Meeting length (minutes)", 5, 60, st.session_state["meeting_min"], step=5)
+    st.session_state["buffer_min"] = s2.number_input(
+        "Buffer between meetings (minutes)", 0, 30, st.session_state["buffer_min"], step=5)
+    cfg = make_config()
+    st.caption(f"Each meeting takes up a {cfg.slot_minutes}-minute slot.")
 
-# --- solve ---
-st.subheader("2. Build the schedule")
-if faculty is not None and st.button("Match students to faculty", type="primary"):
-    with st.spinner("Optimizing schedule..."):
-        assignments, status, obj = solve(faculty, availability, preferences, grid, cfg)
+    rule()
 
-    if assignments.empty:
-        st.error(f"No feasible schedule found (solver status: {status}). Check availability data.")
+    step(2, "Lay out the two visit days")
+    st.caption(
+        "Set when each day starts and ends, then block off any time that is not for "
+        "meetings. Everything you leave open becomes available for student-faculty meetings."
+    )
+
+    for plan in plans:
+        st.markdown(f"#### Day {plan.day}")
+        edit_col, view_col = st.columns([1.15, 1])
+
+        with edit_col:
+            c1, c2 = st.columns(2)
+            plan.start = c1.text_input("Day start", plan.start, key=f"d{plan.day}_start")
+            plan.end = c2.text_input("Day end", plan.end, key=f"d{plan.day}_end")
+
+            st.markdown("**Blocked events** (not available for meetings)")
+            keep = []
+            for j, blk in enumerate(plan.blocks):
+                bc1, bc2, bc3, bc4 = st.columns([3, 2, 2, 1.4])
+                blk.label = bc1.text_input("Event", blk.label, key=f"d{plan.day}_b{j}_l")
+                blk.start = bc2.text_input("Start", blk.start, key=f"d{plan.day}_b{j}_s")
+                blk.end = bc3.text_input("End", blk.end, key=f"d{plan.day}_b{j}_e")
+                bc4.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
+                if not bc4.button("Remove", key=f"d{plan.day}_b{j}_x",
+                                  use_container_width=True):
+                    keep.append(blk)
+            plan.blocks = keep
+
+            if st.button(f"Add event to Day {plan.day}", key=f"d{plan.day}_add"):
+                plan.blocks.append(Block("New event", "10:00", "10:30"))
+                st.rerun()
+
+        with view_col:
+            day_grid = build_grid_from_plans([plan], cfg)
+            n = len(day_grid)
+            st.caption(f"Day {plan.day} schedule  -  {n} meeting slot{'s' if n != 1 else ''}")
+            render_day_timeline(plan)
+
+        rule()
+
+    st.session_state["plans"] = plans
+
+    grid = build_grid_from_plans(plans, cfg)
+    if grid.empty:
+        st.error("No open meeting slots yet. Widen the day hours or remove some blocks.")
     else:
-        st.session_state["result"] = {
-            "assignments": assignments,
-            "faculty": faculty,
-            "preferences": preferences,
-            "grid": grid,
-            "status": status,
-        }
+        notice(f"{len(grid)} total meeting slots across the two days.")
 
-# --- results ---
-if "result" in st.session_state:
-    r = st.session_state["result"]
-    sched = render_schedules(r["assignments"], r["faculty"], r["grid"])
-    mx = compute_metrics(r["assignments"], r["preferences"])
 
-    st.subheader("3. Results")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total meetings", mx["total_meetings"])
-    m2.metric("Got their #1 choice", f"{mx['top1_met']}/{mx['n_students']}")
-    m3.metric("Avg top-3 met", f"{mx['top3_avg']:.2f}/3")
-    m4.metric("Worst-off top-3", f"{mx['top3_worst']}/3")
+with tabs[1]:
+    render_visit_days()
 
-    tab_stu, tab_fac = st.tabs(["By student", "By faculty"])
 
-    with tab_stu:
-        pick = st.selectbox("View a student", sorted(sched["student_id"].unique()))
-        st.dataframe(
-            sched[sched["student_id"] == pick][["day", "start", "end", "faculty"]],
-            hide_index=True,
-            use_container_width=True,
+# =====================================================================
+# TAB 3 - CONTACT PROSPECTIVE STUDENTS (preference form)
+# =====================================================================
+def render_student_intake():
+    from google_intake import send_intake
+    from form_spec import build_spec
+    from test_students import generate_students
+    import send_log
+
+    DEFAULT_SUBJECT = "IEOR Visit Day: tell us which faculty you want to meet"
+
+    step(1, "Upload prospective students")
+    st.caption(
+        "Upload a CSV with columns: name (or first name + last name) and email. "
+        "Each student will be emailed the preference form; responses collect in a "
+        "Google Sheet the matcher can read."
+    )
+
+    up_col, test_col = st.columns([3, 1])
+    with up_col:
+        stu_file = st.file_uploader("Student list (CSV)", type="csv", key="intake_csv")
+    with test_col:
+        st.write("")
+        st.write("")
+        if st.button("Use test students"):
+            st.session_state["recipients"] = generate_students(25)
+            st.session_state["recipients_source"] = "25 generated test students"
+
+    if stu_file is not None:
+        st.session_state["recipients"] = pd.read_csv(stu_file)
+        st.session_state["recipients_source"] = f"uploaded file: {stu_file.name}"
+
+    recipients = st.session_state.get("recipients")
+    if recipients is None:
+        st.info("Waiting for a student CSV, or click Use test students to try it out.")
+        return
+
+    notice(f"Loaded {len(recipients)} students ({st.session_state['recipients_source']}).")
+    st.dataframe(recipients.head(25), hide_index=True, use_container_width=True)
+
+    result = send_intake(recipients, roster_path=ROSTER_XLSX, dry_run=True)
+    if result.errors:
+        with st.expander(f"{len(result.errors)} row issue(s)"):
+            for e in result.errors:
+                st.write("- ", e)
+
+    step(2, "Preview the form")
+    st.caption("This is exactly what students will see and answer.")
+    subject = st.text_input(
+        "Email subject line",
+        value=st.session_state.get("subject", DEFAULT_SUBJECT),
+        key="subject",
+    )
+
+    spec = build_spec(ROSTER_XLSX)
+    with st.expander(f"Form: {spec['title']}  ({len(spec['questions'])} questions)", expanded=True):
+        st.markdown(f"*{spec['description']}*")
+        for i, q in enumerate(spec["questions"], start=1):
+            req = " (required)" if q.get("required") else ""
+            st.markdown(f"**{i}. {q['title']}**  `{q['type']}`{req}")
+            if q.get("help"):
+                st.caption(q["help"])
+            opts = q.get("options", [])
+            if opts:
+                shown = ", ".join(opts[:10])
+                more = f" ... (+{len(opts) - 10} more)" if len(opts) > 10 else ""
+                st.caption(f"Options: {shown}{more}")
+    st.caption("Adding custom sections to the form is planned but not yet available.")
+
+    step(3, "Send the form")
+    last = send_log.last_send()
+    if last:
+        tag = " (simulated)" if last.get("simulated") else ""
+        notice(
+            f"Last sent {send_log.pretty_time(last['timestamp'])} to "
+            f"{last['n_recipients']} students{tag}."
         )
-        st.download_button(
-            "Download all student schedules (CSV)",
-            sched.to_csv(index=False),
-            "student_schedules.csv",
-            "text/csv",
+    st.caption(
+        "Live sending requires Google credentials (see SETUP_GOOGLE.md). Until "
+        "those are set up, this records the send and confirms without emailing."
+    )
+
+    if st.button("Send form to students", type="primary", disabled=not result.ok):
+        try:
+            live = send_intake(recipients, roster_path=ROSTER_XLSX, dry_run=False)
+            entry = send_log.record_send(
+                live.n_recipients, subject, live.form_url, live.sheet_url, simulated=False,
+            )
+            notice(f"Form created: {live.form_url}")
+            notice(f"Responses sheet: {live.sheet_url}")
+        except NotImplementedError:
+            entry = send_log.record_send(result.n_recipients, subject, simulated=True)
+        st.success(
+            f"Sent on {send_log.pretty_time(entry['timestamp'])} to "
+            f"{entry['n_recipients']} students."
+            + ("  (simulated - no email sent yet)" if entry["simulated"] else "")
         )
 
-    with tab_fac:
-        fpick = st.selectbox("View a faculty member", sorted(sched["faculty"].unique()))
-        fac_view = sched[sched["faculty"] == fpick][["day", "start", "end", "student_id"]]
-        st.dataframe(fac_view, hide_index=True, use_container_width=True)
-        st.download_button(
-            "Download full schedule (CSV)",
-            sched.to_csv(index=False),
-            "full_schedule.csv",
-            "text/csv",
+
+with tabs[2]:
+    render_student_intake()
+
+
+# =====================================================================
+# TAB 4 - CONTACT FACULTY AVAILABILITY (availability form)
+# =====================================================================
+def render_faculty_intake():
+    from google_intake import send_intake
+    from faculty_form_spec import build_faculty_spec
+    import send_log
+
+    DEFAULT_SUBJECT = "IEOR Visit Day: when are you available to meet students?"
+
+    grid = get_grid()
+    if grid.empty:
+        st.warning("Set up the visit days first (no meeting slots defined yet).")
+        return
+
+    step(1, "Upload faculty")
+    st.caption(
+        "Upload a CSV with columns: name (or first name + last name) and email. "
+        "Each faculty will be emailed the availability form for the two visit days."
+    )
+
+    up_col, roster_col = st.columns([3, 1])
+    with up_col:
+        fac_file = st.file_uploader("Faculty list (CSV)", type="csv", key="fac_csv")
+    with roster_col:
+        st.write("")
+        st.write("")
+        if st.button("Use IEOR roster"):
+            from roster import load_roster
+            r = load_roster(ROSTER_XLSX)
+            r = r.assign(email=r["name"].str.lower().str.replace(" ", ".") + "@berkeley.edu")
+            st.session_state["fac_recipients"] = r[["name", "email"]]
+            st.session_state["fac_source"] = "IEOR faculty roster"
+
+    if fac_file is not None:
+        st.session_state["fac_recipients"] = pd.read_csv(fac_file)
+        st.session_state["fac_source"] = f"uploaded file: {fac_file.name}"
+
+    recipients = st.session_state.get("fac_recipients")
+    if recipients is None:
+        st.info("Waiting for a faculty CSV, or click Use IEOR roster to try it out.")
+        return
+
+    notice(f"Loaded {len(recipients)} faculty ({st.session_state['fac_source']}).")
+    st.dataframe(recipients.head(25), hide_index=True, use_container_width=True)
+
+    spec = build_faculty_spec(grid)
+    result = send_intake(recipients, spec=spec, dry_run=True)
+    if result.errors:
+        with st.expander(f"{len(result.errors)} row issue(s)"):
+            for e in result.errors:
+                st.write("- ", e)
+
+    step(2, "Preview the form")
+    st.caption("The available time windows come from your visit-day structure.")
+    subject = st.text_input(
+        "Email subject line",
+        value=st.session_state.get("fac_subject", DEFAULT_SUBJECT),
+        key="fac_subject",
+    )
+
+    with st.expander(f"Form: {spec['title']}  ({len(spec['questions'])} questions)", expanded=True):
+        st.markdown(f"*{spec['description']}*")
+        for i, q in enumerate(spec["questions"], start=1):
+            req = " (required)" if q.get("required") else ""
+            st.markdown(f"**{i}. {q['title']}**  `{q['type']}`{req}")
+            if q.get("help"):
+                st.caption(q["help"])
+            opts = q.get("options", [])
+            if opts:
+                shown = ", ".join(opts[:10])
+                more = f" ... (+{len(opts) - 10} more)" if len(opts) > 10 else ""
+                st.caption(f"Options: {shown}{more}")
+
+    step(3, "Send the form")
+    last = send_log.last_send(key="faculty")
+    if last:
+        tag = " (simulated)" if last.get("simulated") else ""
+        notice(
+            f"Last sent {send_log.pretty_time(last['timestamp'])} to "
+            f"{last['n_recipients']} faculty{tag}."
         )
+    st.caption(
+        "Live sending requires Google credentials (see SETUP_GOOGLE.md). Until "
+        "those are set up, this records the send and confirms without emailing."
+    )
+
+    if st.button("Send form to faculty", type="primary", disabled=not result.ok):
+        try:
+            live = send_intake(recipients, spec=spec, dry_run=False)
+            entry = send_log.record_send(
+                live.n_recipients, subject, live.form_url, live.sheet_url,
+                simulated=False, key="faculty",
+            )
+            notice(f"Form created: {live.form_url}")
+            notice(f"Responses sheet: {live.sheet_url}")
+        except NotImplementedError:
+            entry = send_log.record_send(
+                result.n_recipients, subject, simulated=True, key="faculty"
+            )
+        st.success(
+            f"Sent on {send_log.pretty_time(entry['timestamp'])} to "
+            f"{entry['n_recipients']} faculty."
+            + ("  (simulated - no email sent yet)" if entry["simulated"] else "")
+        )
+
+    rule()
+    step(4, "See who has responded")
+    st.caption(
+        "As faculty submit the form, they appear here. Select a faculty member to see "
+        "their availability across the two days."
+    )
+
+    responses = _faculty_responses(recipients, grid)
+    if st.button("Load sample responses", key="load_fac_resp"):
+        st.session_state["fac_responses_loaded"] = True
+    if not st.session_state.get("fac_responses_loaded"):
+        st.info(
+            "No responses loaded yet. Once the form is live, responses show up "
+            "automatically. Click Load sample responses to preview this view."
+        )
+        return
+
+    responded = sorted(responses.keys())
+    pending = [n for n in recipients_names(recipients) if n not in responses]
+    notice(f"{len(responded)} of {len(responded) + len(pending)} faculty have responded.")
+
+    pick = st.selectbox("View a faculty member's availability", responded)
+    if pick:
+        render_availability_timeline(grid, responses[pick])
+
+    if pending:
+        with st.expander(f"{len(pending)} faculty have not responded yet"):
+            for n in pending:
+                st.write("- ", n)
+
+
+def recipients_names(recipients):
+    cols = {c.lower().strip(): c for c in recipients.columns}
+    if "name" in cols:
+        return [str(x).strip() for x in recipients[cols["name"]]]
+    first = cols.get("first name") or cols.get("first")
+    last = cols.get("last name") or cols.get("last")
+    if first and last:
+        return [f"{r[first]} {r[last]}".strip() for _, r in recipients.iterrows()]
+    return [str(x) for x in recipients.iloc[:, 0]]
+
+
+def _faculty_responses(recipients, grid):
+    """Simulated availability responses: roughly 70% of faculty have replied, each
+    with a plausible set of free windows. Stands in until live responses are wired."""
+    import random
+    names = recipients_names(recipients)
+    windows = {int(d): [f"{r.start_time}-{r.end_time}"
+                        for r in grid[grid.day == d].itertuples()]
+               for d in grid["day"].unique()}
+    all_windows = [w for ws in windows.values() for w in ws]
+
+    out = {}
+    rng = random.Random(7)
+    for i, name in enumerate(names):
+        if rng.random() < 0.7:  # responded
+            k = max(1, int(len(all_windows) * rng.uniform(0.4, 0.85)))
+            out[name] = set(rng.sample(all_windows, k=k))
+    return out
+
+
+with tabs[3]:
+    render_faculty_intake()
+
+
+# =====================================================================
+# TAB 5 - BUILD SCHEDULES: load -> solve -> review -> download
+# =====================================================================
+def render_matching():
+    step(1, "Load data")
+    source = st.radio(
+        "Load data source",
+        ["Use Demo Data", "Use Collected Data"],
+        horizontal=True,
+    )
+
+    faculty = availability = preferences = None
+    cfg = make_config()
+    grid = get_grid()
+
+    if source == "Use Demo Data":
+        demo_cfg = make_config()
+        demo_cfg.num_students = 25
+        faculty, availability, preferences, _ = generate(demo_cfg)
+        # use the staff-defined grid, regenerating availability against it
+        availability = _availability_on_grid(faculty, grid)
+        cfg = demo_cfg
+        notice("Demo data loaded and ready to schedule.")
+    else:
+        st.caption(
+            "Upload three files. faculty.csv (faculty_id, name, area), "
+            "availability.csv (faculty_id, slot_id), preferences.csv (student_id, faculty_id, rank)."
+        )
+        fac_f = st.file_uploader("faculty.csv", type="csv")
+        avail_f = st.file_uploader("availability.csv", type="csv")
+        pref_f = st.file_uploader("preferences.csv", type="csv")
+        if fac_f and avail_f and pref_f:
+            faculty = pd.read_csv(fac_f)
+            availability = pd.read_csv(avail_f)
+            preferences = pd.read_csv(pref_f)
+            notice("Collected data loaded and ready to schedule.")
+
+    rule()
+    step(2, "Build the schedule")
+    with st.expander("Advanced settings"):
+        st.session_state["time_limit"] = st.slider(
+            "Solver time limit (seconds)", 5, 120, st.session_state["time_limit"],
+            help="How long the optimizer may search. Longer can find better schedules.")
+    cfg.solver_time_limit_s = st.session_state["time_limit"]
+
+    if faculty is not None and st.button("Match students to faculty", type="primary"):
+        with st.spinner("Optimizing schedule..."):
+            assignments, status, obj = solve(faculty, availability, preferences, grid, cfg)
+
+        if assignments.empty:
+            st.error(f"No feasible schedule found (solver status: {status}). Check availability data.")
+        else:
+            st.session_state["result"] = {
+                "assignments": assignments,
+                "faculty": faculty,
+                "preferences": preferences,
+                "grid": grid,
+                "status": status,
+            }
+
+    if "result" in st.session_state:
+        r = st.session_state["result"]
+        sched = render_schedules(r["assignments"], r["faculty"], r["grid"])
+        mx = compute_metrics(r["assignments"], r["preferences"])
+
+        step(3, "Results")
+        cards = [
+            ("navy", "Total meetings", str(mx["total_meetings"])),
+            ("gold", "Got their #1 choice", f"{mx['top1_met']}/{mx['n_students']}"),
+            ("navy", "Avg top-3 met", f"{mx['top3_avg']:.2f}/3"),
+            ("gold", "Worst-off top-3", f"{mx['top3_worst']}/3"),
+        ]
+        html = '<div class="cardrow">' + "".join(
+            f'<div class="card {c}"><div class="label">{lab}</div>'
+            f'<div class="value">{val}</div></div>'
+            for c, lab, val in cards
+        ) + "</div>"
+        st.markdown(html, unsafe_allow_html=True)
+
+        view_stu, view_fac = st.tabs(["By student", "By faculty"])
+        with view_stu:
+            pick = st.selectbox("View a student", sorted(sched["student_id"].unique()))
+            st.dataframe(
+                sched[sched["student_id"] == pick][["day", "start", "end", "faculty"]],
+                hide_index=True, use_container_width=True,
+            )
+            st.download_button(
+                "Download all student schedules (CSV)",
+                sched.to_csv(index=False), "student_schedules.csv", "text/csv",
+            )
+        with view_fac:
+            fpick = st.selectbox("View a faculty member", sorted(sched["faculty"].unique()))
+            st.dataframe(
+                sched[sched["faculty"] == fpick][["day", "start", "end", "student_id"]],
+                hide_index=True, use_container_width=True,
+            )
+            st.download_button(
+                "Download full schedule (CSV)",
+                sched.to_csv(index=False), "full_schedule.csv", "text/csv",
+            )
+
+
+def _availability_on_grid(faculty, grid):
+    """Regenerate demo faculty availability against the staff-defined grid."""
+    import random
+    slots = grid["slot_id"].tolist()
+    rows = []
+    rng = random.Random(42)
+    for fid in faculty["faculty_id"]:
+        k = max(1, int(len(slots) * rng.uniform(0.5, 0.9)))
+        for s in rng.sample(slots, k=k):
+            rows.append({"faculty_id": fid, "slot_id": s})
+    return pd.DataFrame(rows)
+
+
+with tabs[4]:
+    render_matching()

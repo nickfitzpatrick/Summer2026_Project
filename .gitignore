@@ -4,3 +4,7 @@ data/*.csv
 outputs/*.csv
 .venv/
 .DS_Store
+credentials/
+*.json.token
+data/send_log.json
+data/*.json

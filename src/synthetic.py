@@ -5,22 +5,46 @@ This is a real deliverable, not a stub. It deliberately builds HARD instances:
 - student interests cluster by research area, so preferences overlap and contend
 - faculty availability has gaps, so popular faculty are not free in every slot
 
+By default it uses the REAL IEOR faculty roster (25 faculty with one canonical
+research area each), so student interest clustering keys off the department's
+actual research-area mix. Set cfg.use_real_roster = False to fall back to a
+fully invented faculty list of cfg.num_faculty profs over abstract areas.
+
 Outputs three CSVs that mirror what the real intake forms will collect:
   faculty.csv      one row per faculty with primary research area
   availability.csv long format: (faculty_id, slot_id) the faculty is free
   preferences.csv  long format: (student_id, faculty_id, rank) top-N ranked
 """
 
+import os
 import random
 import numpy as np
 import pandas as pd
 
 from config import Config, DEFAULT
 from grid import build_grid
+from roster import load_roster, CANONICAL_AREAS
 
 AREAS = [
     "Optimization", "Stochastic", "ML", "Supply Chain", "Finance", "Healthcare",
 ]
+
+
+def _build_faculty(cfg: Config):
+    """Return (faculty_df, areas). Real roster by default, invented otherwise."""
+    if cfg.use_real_roster:
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        roster = load_roster(os.path.join(here, cfg.roster_path))
+        return roster[["faculty_id", "name", "area"]].copy(), CANONICAL_AREAS
+    areas = AREAS[: cfg.num_research_areas]
+    faculty = pd.DataFrame(
+        {
+            "faculty_id": [f"F{i+1:02d}" for i in range(cfg.num_faculty)],
+            "name": [f"Prof {i+1:02d}" for i in range(cfg.num_faculty)],
+            "area": [random.choice(areas) for _ in range(cfg.num_faculty)],
+        }
+    )
+    return faculty, areas
 
 
 def generate(cfg: Config = DEFAULT):
@@ -29,19 +53,16 @@ def generate(cfg: Config = DEFAULT):
 
     grid = build_grid(cfg)
     slots = grid["slot_id"].tolist()
-    areas = AREAS[: cfg.num_research_areas]
 
-    faculty = pd.DataFrame(
-        {
-            "faculty_id": [f"F{i+1:02d}" for i in range(cfg.num_faculty)],
-            "name": [f"Prof {i+1:02d}" for i in range(cfg.num_faculty)],
-            "area": [random.choice(areas) for _ in range(cfg.num_faculty)],
-        }
-    )
+    faculty, areas = _build_faculty(cfg)
+    n_fac = len(faculty)
 
-    # popularity: Zipf-like skew so a handful of faculty dominate demand
-    pop = 1.0 / np.arange(1, cfg.num_faculty + 1)
+    # popularity: Zipf-like skew so a handful of faculty dominate demand. Shuffle
+    # the ranks so skew is independent of roster order (otherwise the real roster
+    # would make whoever is alphabetically first the most popular).
+    pop = 1.0 / np.arange(1, n_fac + 1)
     pop = pop / pop.sum()
+    np.random.shuffle(pop)
     pop_map = dict(zip(faculty["faculty_id"], pop))
 
     # availability: each faculty free in a random contiguous-ish subset of slots

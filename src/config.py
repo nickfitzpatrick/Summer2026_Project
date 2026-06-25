@@ -20,11 +20,15 @@ class Config:
 
     num_days: int = 2
 
+    # faculty source: real roster by default, invented list as a fallback
+    use_real_roster: bool = True
+    roster_path: str = "IEOR_Faculty_Roster.xlsx"
+
     # synthetic data sizing
-    num_faculty: int = 15
+    num_faculty: int = 25             # only used when use_real_roster is False
     num_students: int = 25
     prefs_per_student: int = 8        # top-N ranked faculty per student
-    num_research_areas: int = 6
+    num_research_areas: int = 6       # only used when use_real_roster is False
 
     # objective weights
     # rank value is convex: a top choice is worth far more than several low ranks
