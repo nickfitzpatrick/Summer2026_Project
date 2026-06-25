@@ -19,11 +19,18 @@ preference-weighted meetings while keeping the schedule fair across students.
 ## Run
 ```
 pip install -r requirements.txt
-python src/run.py
+python src/run.py        # CLI: generate, solve, print metrics
+streamlit run app.py     # staff app: load data, match, view, download
 ```
+
+## Staff app (app.py)
+Built for non-technical IEOR staff. Generate demo data or upload the three intake
+CSVs, set meeting/buffer length in the sidebar, click Match, then review per-student
+and per-faculty schedules and download them. The slot length set here flows through
+the grid, model, and rendered times.
 
 ## Next steps for the team
 1. Intake forms: Google Form -> CSV for faculty availability and student rankings, matching the schemas in `data/`.
-2. Streamlit app wrapping `run.py`: upload CSVs, solve, view/export, manual override.
-3. .ics export per student and per faculty (the `ics` lib is already in requirements).
-4. Validation: stress-test with harder synthetic instances and report solution quality.
+2. .ics export per student and per faculty (the `ics` lib is already in requirements).
+3. Manual override in the app: let staff drag/swap a meeting after solving.
+4. Validation: build a deliberately over-subscribed instance and report how the max-min floor allocates the shortfall.

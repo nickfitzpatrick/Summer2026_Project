@@ -32,27 +32,47 @@ def render_schedules(assignments, faculty, grid):
     return sched
 
 
+def compute_metrics(assignments, preferences):
+    """Satisfaction-focused metrics shared by the CLI and the app."""
+    n_students = preferences["student_id"].nunique()
+    got = assignments.merge(preferences, on=["student_id", "faculty_id"], how="left")
+    top3 = (
+        got[got["rank"] <= 3]
+        .groupby("student_id")
+        .size()
+        .reindex(preferences["student_id"].unique())
+        .fillna(0)
+    )
+    met_per_student = (
+        assignments.groupby("student_id").size().reindex(preferences["student_id"].unique()).fillna(0)
+    )
+    return {
+        "total_meetings": len(assignments),
+        "avg_meetings": len(assignments) / n_students if n_students else 0,
+        "min_meetings": int(met_per_student.min()),
+        "max_meetings": int(met_per_student.max()),
+        "top1_met": int(got[got["rank"] == 1]["student_id"].nunique()),
+        "n_students": n_students,
+        "top3_avg": float(top3.mean()),
+        "top3_worst": int(top3.min()),
+    }
+
+
 def main():
     cfg = DEFAULT
     faculty, availability, preferences, grid = generate(cfg)
     assignments, status, obj = solve(faculty, availability, preferences, grid, cfg)
 
     sched = render_schedules(assignments, faculty, grid)
+    mx = compute_metrics(assignments, preferences)
 
-    n_students = preferences["student_id"].nunique()
-    met_per_student = assignments.groupby("student_id").size()
     print(f"solver status: {status}   objective: {obj:.0f}")
-    print(f"total meetings scheduled: {len(assignments)}")
-    print(f"avg meetings per student: {len(assignments) / n_students:.1f}")
-    print(f"min / max meetings per student: {met_per_student.min()} / {met_per_student.max()}")
-
-    # satisfaction metrics
-    got = assignments.merge(preferences, on=["student_id", "faculty_id"], how="left")
-    top1 = got[got["rank"] == 1]["student_id"].nunique()
-    top3 = got[got["rank"] <= 3].groupby("student_id").size()
-    print(f"students who got their #1 choice: {top1} / {n_students}")
-    print(f"avg top-3 choices met per student: {top3.mean():.2f} / 3")
-    print(f"worst-off student got {top3.min()} of their top 3")
+    print(f"total meetings scheduled: {mx['total_meetings']}")
+    print(f"avg meetings per student: {mx['avg_meetings']:.1f}")
+    print(f"min / max meetings per student: {mx['min_meetings']} / {mx['max_meetings']}")
+    print(f"students who got their #1 choice: {mx['top1_met']} / {mx['n_students']}")
+    print(f"avg top-3 choices met per student: {mx['top3_avg']:.2f} / 3")
+    print(f"worst-off student got {mx['top3_worst']} of their top 3")
 
     sched.to_csv("outputs/student_schedules.csv", index=False)
     print("\nwrote outputs/student_schedules.csv")
