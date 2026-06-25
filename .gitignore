@@ -9,6 +9,8 @@ credentials/
 data/send_log.json
 data/*.json
 
-# working screenshots and stray git dirs, not part of the app
+# working screenshots, design scratch, and stray git dirs, not part of the app
 WebImages/
+DesignAssets/
 .git_new/
+.pytest_cache/
