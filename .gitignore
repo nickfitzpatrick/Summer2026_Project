@@ -1,10 +1,14 @@
 __pycache__/
 *.pyc
 data/*.csv
-outputs/*.csv
+outputs/
 .venv/
 .DS_Store
 credentials/
 *.json.token
 data/send_log.json
 data/*.json
+
+# working screenshots and stray git dirs, not part of the app
+WebImages/
+.git_new/
