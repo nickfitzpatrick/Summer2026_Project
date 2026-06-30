@@ -34,6 +34,9 @@ Upload a CSV with either:
 - `name,email`
 - or `first name,last name,email`
 
+Use **Download sample student CSV** if you want to test the upload flow without
+using real student data.
+
 Use the form preview to confirm the questions staff intend to send. In the
 current version, real Google/Gmail sending is not enabled; use the preview and
 CSV fallback workflow unless the project owner has explicitly configured live
@@ -48,8 +51,9 @@ under **Import student responses**. The app will create downloadable
 
 Open **Faculty availability**.
 
-Upload a faculty CSV or use the IEOR roster button. The app previews the
-availability form based on the visit-day slots configured in step 1.
+Upload a faculty CSV. Use **Download sample faculty CSV** if you want to test the
+upload flow without using real faculty data. The app previews the availability
+form based on the visit-day slots configured in step 1.
 
 For scheduling, the availability file must eventually be converted to:
 
@@ -78,6 +82,9 @@ For real data, choose **Use Collected Data** and upload:
 - `faculty.csv`
 - `availability.csv`
 - `preferences.csv`
+
+The app provides sample scheduler CSVs in this section. Download those files if
+you want to test the collected-data workflow exactly as staff will use it.
 
 If you already parsed student and faculty responses in the current app session,
 click **Use parsed response data from this session** instead of re-uploading the

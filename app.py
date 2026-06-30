@@ -27,6 +27,7 @@ from exports import build_export_tables, to_csv_bytes
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOGO = os.path.join(HERE, "assets", "logo.png")
 ROSTER_XLSX = os.path.join(HERE, "IEOR_Faculty_Roster.xlsx")
+SAMPLE_DIR = os.path.join(HERE, "sample_data")
 
 # Berkeley IEOR palette
 NAVY = "#002677"
@@ -162,6 +163,19 @@ def send_log_download(send_log_module):
         "send_log.csv",
         "text/csv",
     )
+
+
+def sample_download(filename, label=None):
+    path = os.path.join(SAMPLE_DIR, filename)
+    if not os.path.exists(path):
+        return
+    with open(path, "rb") as f:
+        st.download_button(
+            label or f"Download {filename}",
+            f.read(),
+            filename,
+            "text/csv",
+        )
 
 
 def message_body(audience):
@@ -520,7 +534,6 @@ def render_student_intake():
     from google_intake import send_intake
     from form_spec import build_spec
     from adapter import adapt
-    from test_students import generate_students
     import send_log
 
     DEFAULT_SUBJECT = "IEOR Visit Day: tell us which faculty you want to meet"
@@ -532,15 +545,8 @@ def render_student_intake():
         "Google Sheet the matcher can read."
     )
 
-    up_col, test_col = st.columns([3, 1])
-    with up_col:
-        stu_file = st.file_uploader("Student list (CSV)", type="csv", key="intake_csv")
-    with test_col:
-        st.write("")
-        st.write("")
-        if st.button("Use test students"):
-            st.session_state["recipients"] = generate_students(25)
-            st.session_state["recipients_source"] = "25 generated test students"
+    sample_download("test_students.csv", "Download sample student CSV")
+    stu_file = st.file_uploader("Student list (CSV)", type="csv", key="intake_csv")
 
     if stu_file is not None:
         st.session_state["recipients"] = pd.read_csv(stu_file)
@@ -548,7 +554,7 @@ def render_student_intake():
 
     recipients = st.session_state.get("recipients")
     if recipients is None:
-        st.info("Waiting for a student CSV, or click Use test students to try it out.")
+        st.info("Upload a student CSV to continue. Use the sample CSV if you want to test the workflow.")
         return
 
     notice(f"Loaded {len(recipients)} students ({st.session_state['recipients_source']}).")
@@ -560,16 +566,15 @@ def render_student_intake():
             for e in result.errors:
                 st.write("- ", e)
 
-    step(2, "Preview the form")
-    st.caption("This is exactly what students will see and answer.")
-    subject = st.text_input(
-        "Email subject line",
-        value=st.session_state.get("subject", DEFAULT_SUBJECT),
-        key="subject",
-    )
-
+    step(2, "Prepare the preference form")
     spec = build_spec(ROSTER_XLSX)
-    with st.expander(f"Form: {spec['title']}  ({len(spec['questions'])} questions)", expanded=True):
+    st.download_button(
+        "Download student form template CSV",
+        spec_template_df(spec).to_csv(index=False).encode("utf-8"),
+        "student_preference_form_template.csv",
+        "text/csv",
+    )
+    with st.expander(f"Preview form questions ({len(spec['questions'])})", expanded=False):
         st.markdown(f"*{spec['description']}*")
         for i, q in enumerate(spec["questions"], start=1):
             req = " (required)" if q.get("required") else ""
@@ -581,13 +586,6 @@ def render_student_intake():
                 shown = ", ".join(opts[:10])
                 more = f" ... (+{len(opts) - 10} more)" if len(opts) > 10 else ""
                 st.caption(f"Options: {shown}{more}")
-    st.caption("Adding custom sections to the form is planned but not yet available.")
-    st.download_button(
-        "Download student form template CSV",
-        spec_template_df(spec).to_csv(index=False).encode("utf-8"),
-        "student_preference_form_template.csv",
-        "text/csv",
-    )
 
     step(3, "Import student responses")
     st.caption(
@@ -613,39 +611,44 @@ def render_student_intake():
             "text/csv",
         )
 
-    step(4, "Send the form")
-    last = send_log.last_send()
-    if last:
-        tag = " (simulated)" if last.get("simulated") else ""
-        notice(
-            f"Last sent {send_log.pretty_time(last['timestamp'])} to "
-            f"{last['n_recipients']} students{tag}."
+    with st.expander("Optional: preview dry-run email", expanded=False):
+        last = send_log.last_send()
+        if last:
+            tag = " (simulated)" if last.get("simulated") else ""
+            notice(
+                f"Last sent {send_log.pretty_time(last['timestamp'])} to "
+                f"{last['n_recipients']} students{tag}."
+            )
+        st.warning("Live email sending is disabled in this build. This only records a dry run.")
+        subject = st.text_input(
+            "Email subject line",
+            value=st.session_state.get("subject", DEFAULT_SUBJECT),
+            key="subject",
         )
-    st.warning("Live email sending is disabled in this build. Use this section to preview and record a dry run.")
-    st.markdown("**Recipient preview**")
-    st.dataframe(pd.DataFrame(result.recipients), hide_index=True, use_container_width=True)
-    body = st.text_area("Email body preview", value=message_body("student"), height=180, key="student_body")
-    dry_run = st.checkbox("Dry run only - do not send email", value=True, disabled=True, key="student_dry")
-    confirmed = st.checkbox(
-        "I reviewed the recipients, subject, and body for this dry run.",
-        key="student_confirm",
-    )
+        st.markdown("**Recipient preview**")
+        st.dataframe(pd.DataFrame(result.recipients), hide_index=True, use_container_width=True)
+        body = st.text_area("Email body preview", value=message_body("student"), height=180, key="student_body")
+        dry_run = st.checkbox("Dry run only - do not send email", value=True, disabled=True, key="student_dry")
+        confirmed = st.checkbox(
+            "I reviewed the recipients, subject, and body for this dry run.",
+            key="student_confirm",
+        )
 
-    if st.button("Record student dry run", type="primary", disabled=not (result.ok and dry_run and confirmed)):
-        entry = send_log.record_send(
-            result.n_recipients,
-            subject,
-            simulated=True,
-            key="student",
-            body=body,
-            dry_run=True,
-            status="dry_run_recorded",
-        )
-        st.success(
-            f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
-            f"for {entry['n_recipients']} students. No email was sent."
-        )
-    send_log_download(send_log)
+        if st.button("Record student dry run", type="primary", disabled=not (result.ok and dry_run and confirmed)):
+            entry = send_log.record_send(
+                result.n_recipients,
+                subject,
+                simulated=True,
+                key="student",
+                body=body,
+                dry_run=True,
+                status="dry_run_recorded",
+            )
+            st.success(
+                f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
+                f"for {entry['n_recipients']} students. No email was sent."
+            )
+        send_log_download(send_log)
 
 
 with tabs[2]:
@@ -670,22 +673,12 @@ def render_faculty_intake():
 
     step(1, "Upload faculty")
     st.caption(
-        "Upload a CSV with columns: name (or first name + last name) and email. "
-        "Each faculty will be emailed the availability form for the two visit days."
+        "Upload a CSV with columns: faculty_id, name, area, and email. "
+        "faculty_id is needed to convert responses into scheduler-ready availability."
     )
 
-    up_col, roster_col = st.columns([3, 1])
-    with up_col:
-        fac_file = st.file_uploader("Faculty list (CSV)", type="csv", key="fac_csv")
-    with roster_col:
-        st.write("")
-        st.write("")
-        if st.button("Use IEOR roster"):
-            from roster import load_roster
-            r = load_roster(ROSTER_XLSX)
-            r = r.assign(email=r["name"].str.lower().str.replace(" ", ".") + "@berkeley.edu")
-            st.session_state["fac_recipients"] = r[["faculty_id", "name", "area", "email"]]
-            st.session_state["fac_source"] = "IEOR faculty roster"
+    sample_download("test_faculty.csv", "Download sample faculty CSV")
+    fac_file = st.file_uploader("Faculty list (CSV)", type="csv", key="fac_csv")
 
     if fac_file is not None:
         st.session_state["fac_recipients"] = pd.read_csv(fac_file)
@@ -693,7 +686,7 @@ def render_faculty_intake():
 
     recipients = st.session_state.get("fac_recipients")
     if recipients is None:
-        st.info("Waiting for a faculty CSV, or click Use IEOR roster to try it out.")
+        st.info("Upload a faculty CSV to continue. Use the sample CSV if you want to test the workflow.")
         return
 
     notice(f"Loaded {len(recipients)} faculty ({st.session_state['fac_source']}).")
@@ -706,15 +699,16 @@ def render_faculty_intake():
             for e in result.errors:
                 st.write("- ", e)
 
-    step(2, "Preview the form")
+    step(2, "Prepare the availability form")
     st.caption("The available time windows come from your visit-day structure.")
-    subject = st.text_input(
-        "Email subject line",
-        value=st.session_state.get("fac_subject", DEFAULT_SUBJECT),
-        key="fac_subject",
+    st.download_button(
+        "Download faculty availability form template CSV",
+        spec_template_df(spec).to_csv(index=False).encode("utf-8"),
+        "faculty_availability_form_template.csv",
+        "text/csv",
     )
 
-    with st.expander(f"Form: {spec['title']}  ({len(spec['questions'])} questions)", expanded=True):
+    with st.expander(f"Preview form questions ({len(spec['questions'])})", expanded=False):
         st.markdown(f"*{spec['description']}*")
         for i, q in enumerate(spec["questions"], start=1):
             req = " (required)" if q.get("required") else ""
@@ -726,12 +720,6 @@ def render_faculty_intake():
                 shown = ", ".join(opts[:10])
                 more = f" ... (+{len(opts) - 10} more)" if len(opts) > 10 else ""
                 st.caption(f"Options: {shown}{more}")
-    st.download_button(
-        "Download faculty availability form template CSV",
-        spec_template_df(spec).to_csv(index=False).encode("utf-8"),
-        "faculty_availability_form_template.csv",
-        "text/csv",
-    )
 
     step(3, "Import faculty responses")
     st.caption(
@@ -753,69 +741,67 @@ def render_faculty_intake():
                     st.warning(w)
         st.download_button("Download availability.csv", availability.to_csv(index=False), "availability.csv", "text/csv")
 
-    step(4, "Send the form")
-    last = send_log.last_send(key="faculty")
-    if last:
-        tag = " (simulated)" if last.get("simulated") else ""
-        notice(
-            f"Last sent {send_log.pretty_time(last['timestamp'])} to "
-            f"{last['n_recipients']} faculty{tag}."
+    with st.expander("Optional: preview dry-run email", expanded=False):
+        last = send_log.last_send(key="faculty")
+        if last:
+            tag = " (simulated)" if last.get("simulated") else ""
+            notice(
+                f"Last sent {send_log.pretty_time(last['timestamp'])} to "
+                f"{last['n_recipients']} faculty{tag}."
+            )
+        st.warning("Live email sending is disabled in this build. This only records a dry run.")
+        subject = st.text_input(
+            "Email subject line",
+            value=st.session_state.get("fac_subject", DEFAULT_SUBJECT),
+            key="fac_subject",
         )
-    st.warning("Live email sending is disabled in this build. Use this section to preview and record a dry run.")
-    st.markdown("**Recipient preview**")
-    st.dataframe(pd.DataFrame(result.recipients), hide_index=True, use_container_width=True)
-    body = st.text_area("Email body preview", value=message_body("faculty"), height=180, key="faculty_body")
-    dry_run = st.checkbox("Dry run only - do not send email", value=True, disabled=True, key="faculty_dry")
-    confirmed = st.checkbox(
-        "I reviewed the recipients, subject, and body for this dry run.",
-        key="faculty_confirm",
-    )
-
-    if st.button("Record faculty dry run", type="primary", disabled=not (result.ok and dry_run and confirmed)):
-        entry = send_log.record_send(
-            result.n_recipients,
-            subject,
-            simulated=True,
-            key="faculty",
-            body=body,
-            dry_run=True,
-            status="dry_run_recorded",
+        st.markdown("**Recipient preview**")
+        st.dataframe(pd.DataFrame(result.recipients), hide_index=True, use_container_width=True)
+        body = st.text_area("Email body preview", value=message_body("faculty"), height=180, key="faculty_body")
+        dry_run = st.checkbox("Dry run only - do not send email", value=True, disabled=True, key="faculty_dry")
+        confirmed = st.checkbox(
+            "I reviewed the recipients, subject, and body for this dry run.",
+            key="faculty_confirm",
         )
-        st.success(
-            f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
-            f"for {entry['n_recipients']} faculty. No email was sent."
-        )
-    send_log_download(send_log)
 
-    rule()
-    step(5, "See who has responded")
-    st.caption(
-        "As faculty submit the form, they appear here. Select a faculty member to see "
-        "their availability across the two days."
-    )
+        if st.button("Record faculty dry run", type="primary", disabled=not (result.ok and dry_run and confirmed)):
+            entry = send_log.record_send(
+                result.n_recipients,
+                subject,
+                simulated=True,
+                key="faculty",
+                body=body,
+                dry_run=True,
+                status="dry_run_recorded",
+            )
+            st.success(
+                f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
+                f"for {entry['n_recipients']} faculty. No email was sent."
+            )
+        send_log_download(send_log)
 
-    responses = _faculty_responses(recipients, grid)
-    if st.button("Load sample responses", key="load_fac_resp"):
-        st.session_state["fac_responses_loaded"] = True
-    if not st.session_state.get("fac_responses_loaded"):
-        st.info(
-            "No responses loaded yet. Once the form is live, responses show up "
-            "automatically. Click Load sample responses to preview this view."
-        )
-        return
-
-    responded = sorted(responses.keys())
-    pending = [n for n in recipients_names(recipients) if n not in responses]
-    notice(f"{len(responded)} of {len(responded) + len(pending)} faculty have responded.")
-
-    pick = st.selectbox("View a faculty member's availability", responded)
-    if pick:
-        render_availability_timeline(grid, responses[pick])
-
-    if pending:
-        with st.expander(f"{len(pending)} faculty have not responded yet"):
-            for n in pending:
-                st.write("- ", n)
+    with st.expander("Optional: view imported faculty availability", expanded=False):
+        if "parsed_availability" not in st.session_state:
+            st.info("Upload a faculty response CSV above to preview parsed availability.")
+        else:
+            parsed = st.session_state["parsed_availability"]
+            if "faculty_id" not in recipients.columns or "name" not in recipients.columns:
+                st.info("Upload a faculty list with faculty_id and name to preview individual timelines.")
+            else:
+                names = recipients_names(recipients)
+                pick = st.selectbox("View a faculty member's availability", names)
+                faculty_row = recipients[recipients["name"].astype(str) == pick]
+                if not faculty_row.empty:
+                    fid = faculty_row["faculty_id"].iloc[0]
+                    free_slots = set(parsed[parsed["faculty_id"] == fid]["slot_id"])
+                    slot_windows = {
+                        r.slot_id: f"{r.start_time}-{r.end_time}"
+                        for r in grid.itertuples()
+                    }
+                    render_availability_timeline(
+                        grid,
+                        {slot_windows[s] for s in free_slots if s in slot_windows},
+                    )
 
 
 def recipients_names(recipients):
@@ -827,25 +813,6 @@ def recipients_names(recipients):
     if first and last:
         return [f"{r[first]} {r[last]}".strip() for _, r in recipients.iterrows()]
     return [str(x) for x in recipients.iloc[:, 0]]
-
-
-def _faculty_responses(recipients, grid):
-    """Simulated availability responses: roughly 70% of faculty have replied, each
-    with a plausible set of free windows. Stands in until live responses are wired."""
-    import random
-    names = recipients_names(recipients)
-    windows = {int(d): [f"{r.start_time}-{r.end_time}"
-                        for r in grid[grid.day == d].itertuples()]
-               for d in grid["day"].unique()}
-    all_windows = [w for ws in windows.values() for w in ws]
-
-    out = {}
-    rng = random.Random(7)
-    for i, name in enumerate(names):
-        if rng.random() < 0.7:  # responded
-            k = max(1, int(len(all_windows) * rng.uniform(0.4, 0.85)))
-            out[name] = set(rng.sample(all_windows, k=k))
-    return out
 
 
 with tabs[3]:
@@ -893,6 +860,14 @@ def render_matching():
             "Upload three files. faculty.csv (faculty_id, name, area), "
             "availability.csv (faculty_id, slot_id), preferences.csv (student_id, faculty_id, rank)."
         )
+        with st.expander("Download sample scheduler CSVs", expanded=False):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                sample_download("test_faculty.csv", "faculty.csv sample")
+            with c2:
+                sample_download("test_availability.csv", "availability.csv sample")
+            with c3:
+                sample_download("test_preferences.csv", "preferences.csv sample")
         fac_f = st.file_uploader("faculty.csv", type="csv")
         avail_f = st.file_uploader("availability.csv", type="csv")
         pref_f = st.file_uploader("preferences.csv", type="csv")
@@ -996,16 +971,17 @@ def render_matching():
                 hide_index=True, use_container_width=True,
             )
         with view_manual:
-            render_manual_review(r)
+            with st.expander("Open manual adjustment tools", expanded=False):
+                render_manual_review(r)
         with view_diag:
-            st.markdown("**Faculty capacity and utilization**")
-            st.dataframe(dx["faculty_capacity"], hide_index=True, use_container_width=True)
-            st.markdown("**Student outcomes**")
-            st.dataframe(dx["student_outcomes"], hide_index=True, use_container_width=True)
-            st.markdown("**Faculty demand and bottlenecks**")
-            st.dataframe(dx["faculty_demand"], hide_index=True, use_container_width=True)
-            st.markdown("**Unassigned preferences**")
-            st.dataframe(dx["unassigned_preferences"], hide_index=True, use_container_width=True)
+            with st.expander("Faculty capacity and utilization", expanded=True):
+                st.dataframe(dx["faculty_capacity"], hide_index=True, use_container_width=True)
+            with st.expander("Student outcomes", expanded=False):
+                st.dataframe(dx["student_outcomes"], hide_index=True, use_container_width=True)
+            with st.expander("Faculty demand and bottlenecks", expanded=False):
+                st.dataframe(dx["faculty_demand"], hide_index=True, use_container_width=True)
+            with st.expander("Unassigned preferences", expanded=False):
+                st.dataframe(dx["unassigned_preferences"], hide_index=True, use_container_width=True)
         with view_exports:
             st.caption("Download these files after each final run so the visit-day record is saved outside the app session.")
             st.download_button(

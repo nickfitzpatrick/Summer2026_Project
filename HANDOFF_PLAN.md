@@ -18,6 +18,8 @@ Development for launch readiness is on `v1-launch-ready`. Do not merge into
 - Documentation for local run, Streamlit deployment, Google setup, staff usage,
   and secrets handling.
 - Validation harness for environments without pytest.
+- CSV sample files in `sample_data/` for testing uploads without hidden in-app
+  test-data buttons.
 
 ## What is intentionally not enabled
 
@@ -33,18 +35,19 @@ of UX testing around preview, dry-run, and confirmation.
 
 1. Run the app locally with `streamlit run app.py`.
 2. Use demo data to build a schedule.
-3. Confirm validation appears before solving.
-4. Confirm diagnostics explain capacity, demand, student outcomes, and unassigned
+3. Download and re-upload the sample CSVs from `sample_data/`.
+4. Confirm validation appears before solving.
+5. Confirm diagnostics explain capacity, demand, student outcomes, and unassigned
    preferences.
-5. Try manual review:
+6. Try manual review:
    - lock a meeting
    - unlock it
    - remove an unlocked meeting
    - add a non-conflicting meeting
-6. Download all exports.
-7. Record dry runs for student and faculty sends; confirm no email is sent.
-8. Download `send_log.csv`.
-9. Test the CSV fallback with exported Google response CSVs or synthetic samples.
+7. Download all exports.
+8. Record dry runs for student and faculty sends; confirm no email is sent.
+9. Download `send_log.csv`.
+10. Test the CSV fallback with exported Google response CSVs or synthetic samples.
 
 ## Operational notes
 

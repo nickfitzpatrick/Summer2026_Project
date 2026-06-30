@@ -1,0 +1,5 @@
+faculty_id,name,area,email
+F01,Prof Ada Lee,Optimization,ada.lee@example.edu
+F02,Prof Ben Chen,Stochastic Systems,ben.chen@example.edu
+F03,Prof Carla Diaz,Machine Learning,carla.diaz@example.edu
+F04,Prof David Rao,Supply Chain,david.rao@example.edu

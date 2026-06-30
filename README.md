@@ -51,6 +51,7 @@ pytest
 ## Input schemas
 
 For the scheduler, the collected-data path expects three CSV files.
+Sample files are available in `sample_data/` and through in-app download buttons.
 
 `faculty.csv`
 
@@ -130,6 +131,7 @@ state is not a permanent system of record.
 ## Project layout
 
 - `app.py`: Streamlit staff app
+- `sample_data/`: small CSV files for trying the upload workflow
 - `src/config.py`: tunable scheduling settings
 - `src/visit_days.py`: visit-day and slot-grid construction
 - `src/model.py`: OR-Tools CP-SAT optimizer
