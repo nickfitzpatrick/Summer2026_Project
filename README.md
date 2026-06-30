@@ -13,11 +13,13 @@ the final schedules.
 1. Build visit days: set meeting length, buffer time, day hours, and blocked
    events such as lunch or tours.
 2. Load prospective students and preview the student preference form.
-3. Load faculty and preview the faculty availability form.
-4. Build schedules from demo data or uploaded CSVs.
-5. Review validation messages before solving.
-6. Review schedule diagnostics after solving.
-7. Download master, student, faculty, and email-ready exports.
+3. Download form templates or upload exported student response CSVs.
+4. Load faculty, preview the faculty availability form, and upload exported
+   faculty response CSVs.
+5. Build schedules from demo data, parsed session data, or uploaded CSVs.
+6. Review validation messages before solving.
+7. Review schedule diagnostics after solving.
+8. Download master, student, faculty, and email-ready exports.
 
 Live Google Forms, Google Sheets, and Gmail automation are intentionally still
 behind a stubbed integration path. Until credentials are provisioned and tested,

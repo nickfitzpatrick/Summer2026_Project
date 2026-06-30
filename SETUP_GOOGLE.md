@@ -63,8 +63,24 @@ body, and explicitly confirmed the send.
 
 ## After responses come in
 
-Download the linked response sheet as CSV and run the adapter to produce the
-files the matcher reads:
+The staff-facing app can now handle the semi-automated CSV fallback:
+
+1. Build the Google Form manually using the downloadable form template CSV.
+2. Link the Google Form to a response Sheet.
+3. After responses arrive, export the Sheet as CSV.
+4. Upload the response CSV in the app.
+5. Download the solver-ready output files.
+
+Student response uploads produce:
+
+- `preferences.csv`
+- `student_interests.csv`
+
+Faculty response uploads produce:
+
+- `availability.csv`
+
+Developers can also run the student adapter from the command line:
 
 ```
 python src/adapter.py path/to/responses.csv
@@ -73,6 +89,9 @@ python src/adapter.py path/to/responses.csv
 This writes `data/preferences.csv` and `data/student_interests.csv`. Load
 `preferences.csv` (with a faculty file and availability file) in the Build
 Schedule tab.
+
+Faculty availability parsing is implemented in `src/faculty_adapter.py` and is
+currently exposed through the Streamlit app.
 
 ## Known UX caveat: ordering 8 faculty
 

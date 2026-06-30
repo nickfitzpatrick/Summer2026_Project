@@ -182,6 +182,19 @@ def message_body(audience):
     )
 
 
+def spec_template_df(spec):
+    rows = []
+    for q in spec["questions"]:
+        rows.append({
+            "question": q["title"],
+            "type": q["type"],
+            "required": q.get("required", False),
+            "options": " | ".join(q.get("options", [])),
+            "help": q.get("help", ""),
+        })
+    return pd.DataFrame(rows)
+
+
 def _tl_row(time_label, css, text, tag=""):
     tag_html = f'<span class="tl-tag">{tag}</span>' if tag else ""
     return (f'<div class="tl-row"><div class="tl-time">{time_label}</div>'
@@ -422,6 +435,7 @@ with tabs[1]:
 def render_student_intake():
     from google_intake import send_intake
     from form_spec import build_spec
+    from adapter import adapt
     from test_students import generate_students
     import send_log
 
@@ -484,8 +498,38 @@ def render_student_intake():
                 more = f" ... (+{len(opts) - 10} more)" if len(opts) > 10 else ""
                 st.caption(f"Options: {shown}{more}")
     st.caption("Adding custom sections to the form is planned but not yet available.")
+    st.download_button(
+        "Download student form template CSV",
+        spec_template_df(spec).to_csv(index=False).encode("utf-8"),
+        "student_preference_form_template.csv",
+        "text/csv",
+    )
 
-    step(3, "Send the form")
+    step(3, "Import student responses")
+    st.caption(
+        "After collecting Google Form responses, download the response Sheet as CSV "
+        "and upload it here. The app converts it to solver-ready preferences.csv."
+    )
+    resp_file = st.file_uploader("Student response CSV from Google Forms", type="csv", key="student_resp_csv")
+    if resp_file is not None:
+        responses = pd.read_csv(resp_file)
+        prefs, interests, warnings = adapt(responses, ROSTER_XLSX)
+        st.session_state["parsed_preferences"] = prefs
+        st.session_state["parsed_student_interests"] = interests
+        notice(f"Parsed {len(prefs)} preference rows for {prefs['student_id'].nunique()} students.")
+        if warnings:
+            with st.expander(f"{len(warnings)} student response warning(s)", expanded=True):
+                for w in warnings:
+                    st.warning(w)
+        st.download_button("Download preferences.csv", prefs.to_csv(index=False), "preferences.csv", "text/csv")
+        st.download_button(
+            "Download student_interests.csv",
+            interests.to_csv(index=False),
+            "student_interests.csv",
+            "text/csv",
+        )
+
+    step(4, "Send the form")
     last = send_log.last_send()
     if last:
         tag = " (simulated)" if last.get("simulated") else ""
@@ -530,6 +574,7 @@ with tabs[2]:
 def render_faculty_intake():
     from google_intake import send_intake
     from faculty_form_spec import build_faculty_spec
+    from faculty_adapter import adapt_faculty_availability
     import send_log
 
     DEFAULT_SUBJECT = "IEOR Visit Day: when are you available to meet students?"
@@ -555,7 +600,7 @@ def render_faculty_intake():
             from roster import load_roster
             r = load_roster(ROSTER_XLSX)
             r = r.assign(email=r["name"].str.lower().str.replace(" ", ".") + "@berkeley.edu")
-            st.session_state["fac_recipients"] = r[["name", "email"]]
+            st.session_state["fac_recipients"] = r[["faculty_id", "name", "area", "email"]]
             st.session_state["fac_source"] = "IEOR faculty roster"
 
     if fac_file is not None:
@@ -597,8 +642,34 @@ def render_faculty_intake():
                 shown = ", ".join(opts[:10])
                 more = f" ... (+{len(opts) - 10} more)" if len(opts) > 10 else ""
                 st.caption(f"Options: {shown}{more}")
+    st.download_button(
+        "Download faculty availability form template CSV",
+        spec_template_df(spec).to_csv(index=False).encode("utf-8"),
+        "faculty_availability_form_template.csv",
+        "text/csv",
+    )
 
-    step(3, "Send the form")
+    step(3, "Import faculty responses")
+    st.caption(
+        "After collecting Google Form responses, download the response Sheet as CSV "
+        "and upload it here. The app converts checked time windows to availability.csv."
+    )
+    fac_resp_file = st.file_uploader("Faculty response CSV from Google Forms", type="csv", key="faculty_resp_csv")
+    if fac_resp_file is not None:
+        responses = pd.read_csv(fac_resp_file)
+        if "faculty_id" not in recipients.columns:
+            st.warning("Faculty matching is most reliable when the uploaded faculty list includes faculty_id.")
+        availability, warnings = adapt_faculty_availability(responses, recipients, grid)
+        st.session_state["parsed_availability"] = availability
+        st.session_state["parsed_faculty"] = recipients
+        notice(f"Parsed {len(availability)} faculty availability rows.")
+        if warnings:
+            with st.expander(f"{len(warnings)} faculty response warning(s)", expanded=True):
+                for w in warnings:
+                    st.warning(w)
+        st.download_button("Download availability.csv", availability.to_csv(index=False), "availability.csv", "text/csv")
+
+    step(4, "Send the form")
     last = send_log.last_send(key="faculty")
     if last:
         tag = " (simulated)" if last.get("simulated") else ""
@@ -633,7 +704,7 @@ def render_faculty_intake():
     send_log_download(send_log)
 
     rule()
-    step(4, "See who has responded")
+    step(5, "See who has responded")
     st.caption(
         "As faculty submit the form, they appear here. Select a faculty member to see "
         "their availability across the two days."
@@ -721,6 +792,19 @@ def render_matching():
         cfg = demo_cfg
         notice("Demo data loaded and ready to schedule.")
     else:
+        session_ready = (
+            "parsed_faculty" in st.session_state
+            and "parsed_availability" in st.session_state
+            and "parsed_preferences" in st.session_state
+        )
+        if session_ready:
+            if st.button("Use parsed response data from this session"):
+                faculty = st.session_state["parsed_faculty"]
+                if "area" not in faculty.columns:
+                    faculty = faculty.assign(area="")
+                availability = st.session_state["parsed_availability"]
+                preferences = st.session_state["parsed_preferences"]
+                notice("Parsed response data loaded and ready to schedule.")
         st.caption(
             "Upload three files. faculty.csv (faculty_id, name, area), "
             "availability.csv (faculty_id, slot_id), preferences.csv (student_id, faculty_id, rank)."

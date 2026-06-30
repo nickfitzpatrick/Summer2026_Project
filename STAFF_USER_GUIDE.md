@@ -39,6 +39,11 @@ current version, real Google/Gmail sending is not enabled; use the preview and
 CSV fallback workflow unless the project owner has explicitly configured live
 credentials.
 
+Download the student form template CSV if you are building the Google Form
+manually. After students respond, export the response Sheet as CSV and upload it
+under **Import student responses**. The app will create downloadable
+`preferences.csv` and `student_interests.csv` files.
+
 ### 3. Load faculty availability
 
 Open **Faculty availability**.
@@ -54,6 +59,14 @@ F01,D1-S1
 F01,D1-S2
 ```
 
+Download the faculty availability form template CSV if you are building the
+Google Form manually. After faculty respond, export the response Sheet as CSV and
+upload it under **Import faculty responses**. The app will create downloadable
+`availability.csv`.
+
+Faculty response parsing requires a faculty list with `faculty_id`; otherwise
+the app cannot safely connect a response to the scheduler.
+
 ### 4. Build schedules
 
 Open **Build schedules**.
@@ -65,6 +78,10 @@ For real data, choose **Use Collected Data** and upload:
 - `faculty.csv`
 - `availability.csv`
 - `preferences.csv`
+
+If you already parsed student and faculty responses in the current app session,
+click **Use parsed response data from this session** instead of re-uploading the
+three files.
 
 The app checks the files before solving. Red errors must be fixed before the
 schedule can run. Yellow warnings are allowed, but staff should review them
