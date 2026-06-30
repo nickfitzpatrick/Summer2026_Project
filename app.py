@@ -20,6 +20,9 @@ from synthetic import generate
 from model import solve
 from run import render_schedules, compute_metrics
 from visit_days import Block, default_plans, build_grid_from_plans
+from validation import validate_solver_inputs
+from diagnostics import build_diagnostics
+from exports import build_export_tables, to_csv_bytes
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOGO = os.path.join(HERE, "assets", "logo.png")
@@ -705,7 +708,23 @@ def render_matching():
             help="How long the optimizer may search. Longer can find better schedules.")
     cfg.solver_time_limit_s = st.session_state["time_limit"]
 
-    if faculty is not None and st.button("Match students to faculty", type="primary"):
+    validation = None
+    if faculty is not None:
+        validation = validate_solver_inputs(faculty, availability, preferences, grid)
+        if validation.info:
+            for msg in validation.info:
+                st.success(msg)
+        if validation.warnings:
+            with st.expander(f"{len(validation.warnings)} warning(s) to review before scheduling", expanded=True):
+                for msg in validation.warnings:
+                    st.warning(msg)
+        if validation.errors:
+            with st.expander(f"{len(validation.errors)} issue(s) must be fixed before scheduling", expanded=True):
+                for msg in validation.errors:
+                    st.error(msg)
+
+    can_solve = validation.ok if validation is not None else False
+    if faculty is not None and st.button("Match students to faculty", type="primary", disabled=not can_solve):
         with st.spinner("Optimizing schedule..."):
             assignments, status, obj = solve(faculty, availability, preferences, grid, cfg)
 
@@ -717,13 +736,19 @@ def render_matching():
                 "faculty": faculty,
                 "preferences": preferences,
                 "grid": grid,
+                "availability": availability,
                 "status": status,
+                "objective": obj,
             }
 
     if "result" in st.session_state:
         r = st.session_state["result"]
         sched = render_schedules(r["assignments"], r["faculty"], r["grid"])
         mx = compute_metrics(r["assignments"], r["preferences"])
+        dx = build_diagnostics(
+            r["assignments"], r["faculty"], r["availability"], r["preferences"], r["grid"]
+        )
+        exports = build_export_tables(sched)
 
         step(3, "Results")
         cards = [
@@ -738,17 +763,28 @@ def render_matching():
             for c, lab, val in cards
         ) + "</div>"
         st.markdown(html, unsafe_allow_html=True)
+        st.caption(f"Solver status: {r['status']}  |  objective: {r['objective']:.0f}")
 
-        view_stu, view_fac = st.tabs(["By student", "By faculty"])
+        if dx["warnings"]:
+            with st.expander("Diagnostics warnings", expanded=True):
+                for msg in dx["warnings"]:
+                    st.warning(msg)
+
+        dsum = dx["summary"]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Capacity used", f"{dsum['utilization_rate']:.0%}")
+        c2.metric("Available slots", f"{dsum['total_capacity']}")
+        c3.metric("Avg meetings/student", f"{dsum['avg_meetings_per_student']:.1f}")
+        c4.metric("Lowest meetings", f"{dsum['lowest_student_meetings']}")
+
+        view_stu, view_fac, view_diag, view_exports = st.tabs([
+            "By student", "By faculty", "Diagnostics", "Exports"
+        ])
         with view_stu:
             pick = st.selectbox("View a student", sorted(sched["student_id"].unique()))
             st.dataframe(
                 sched[sched["student_id"] == pick][["day", "start", "end", "faculty"]],
                 hide_index=True, use_container_width=True,
-            )
-            st.download_button(
-                "Download all student schedules (CSV)",
-                sched.to_csv(index=False), "student_schedules.csv", "text/csv",
             )
         with view_fac:
             fpick = st.selectbox("View a faculty member", sorted(sched["faculty"].unique()))
@@ -756,9 +792,46 @@ def render_matching():
                 sched[sched["faculty"] == fpick][["day", "start", "end", "student_id"]],
                 hide_index=True, use_container_width=True,
             )
+        with view_diag:
+            st.markdown("**Faculty capacity and utilization**")
+            st.dataframe(dx["faculty_capacity"], hide_index=True, use_container_width=True)
+            st.markdown("**Student outcomes**")
+            st.dataframe(dx["student_outcomes"], hide_index=True, use_container_width=True)
+            st.markdown("**Faculty demand and bottlenecks**")
+            st.dataframe(dx["faculty_demand"], hide_index=True, use_container_width=True)
+            st.markdown("**Unassigned preferences**")
+            st.dataframe(dx["unassigned_preferences"], hide_index=True, use_container_width=True)
+        with view_exports:
+            st.caption("Download these files after each final run so the visit-day record is saved outside the app session.")
             st.download_button(
-                "Download full schedule (CSV)",
-                sched.to_csv(index=False), "full_schedule.csv", "text/csv",
+                "Download master schedule CSV",
+                to_csv_bytes(exports["master_schedule"]),
+                "master_schedule.csv",
+                "text/csv",
+            )
+            st.download_button(
+                "Download student schedules CSV",
+                to_csv_bytes(exports["student_schedules"]),
+                "student_schedules.csv",
+                "text/csv",
+            )
+            st.download_button(
+                "Download faculty schedules CSV",
+                to_csv_bytes(exports["faculty_schedules"]),
+                "faculty_schedules.csv",
+                "text/csv",
+            )
+            st.download_button(
+                "Download student email text CSV",
+                to_csv_bytes(exports["student_email_text"]),
+                "student_email_text.csv",
+                "text/csv",
+            )
+            st.download_button(
+                "Download faculty email text CSV",
+                to_csv_bytes(exports["faculty_email_text"]),
+                "faculty_email_text.csv",
+                "text/csv",
             )
 
 

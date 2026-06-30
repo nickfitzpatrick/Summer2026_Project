@@ -8,7 +8,6 @@ import pandas as pd
 
 from config import DEFAULT
 from synthetic import generate
-from model import solve
 
 
 def render_schedules(assignments, faculty, grid):
@@ -21,6 +20,7 @@ def render_schedules(assignments, faculty, grid):
         rows.append(
             {
                 "student_id": a["student_id"],
+                "faculty_id": a["faculty_id"],
                 "faculty": fac_name[a["faculty_id"]],
                 "day": t["day"],
                 "start": t["start_time"],
@@ -59,6 +59,8 @@ def compute_metrics(assignments, preferences):
 
 
 def main():
+    from model import solve
+
     cfg = DEFAULT
     faculty, availability, preferences, grid = generate(cfg)
     assignments, status, obj = solve(faculty, availability, preferences, grid, cfg)

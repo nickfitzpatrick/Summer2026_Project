@@ -44,5 +44,6 @@ rows[8][Q_INTERESTS] = rows[8][Q_INTERESTS] + ", Quantum Widgets"  # bad area
 
 df = pd.DataFrame(rows)
 out = os.path.join(HERE, "data", "responses_sample.csv")
+os.makedirs(os.path.dirname(out), exist_ok=True)
 df.to_csv(out, index=False)
 print(f"wrote {out}  ({len(df)} rows, {len(df.columns)} columns)")
