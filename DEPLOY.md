@@ -3,10 +3,9 @@
 This gives the team a persistent URL (e.g. `https://ieor-visitday.streamlit.app`)
 that runs `app.py` with no local setup. Free for public or Berkeley-account repos.
 
-The app runs in demo-data mode with no secrets, so it deploys as-is. The Google
-Forms / Gmail intake is optional and stays disabled on the hosted version (it needs
-OAuth credentials that should not live in a public deploy). Hosted = demo and
-scheduling review; live form-sending stays local for now.
+The app can deploy with demo data, but set `APP_PASSWORD` in Streamlit Secrets
+before sharing a public URL. The Google Forms / Gmail intake is optional and
+stays disabled on the hosted version until credentials are configured.
 
 ## Prerequisites
 
@@ -37,7 +36,8 @@ scheduling review; live form-sending stays local for now.
 ## Streamlit secrets
 
 Do not commit passwords, OAuth client secrets, Gmail accounts, Berkeley accounts,
-API keys, or service-account JSON files.
+API keys, or service-account JSON files. The app checks `APP_PASSWORD` before it
+shows the scheduling interface.
 
 For Streamlit Community Cloud, open the app dashboard, then go to **Settings ->
 Secrets**. Use TOML-style values like:
@@ -59,6 +59,9 @@ when a guarded live path is enabled.
 
 Local developers can create `.streamlit/secrets.toml` with the same structure.
 That file must not be committed.
+
+If `APP_PASSWORD` is missing, the app shows a warning and allows local/demo use.
+For any shared deployment, treat `APP_PASSWORD` as required.
 
 ## Keeping it updated
 

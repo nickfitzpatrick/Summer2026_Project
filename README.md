@@ -152,6 +152,7 @@ state is not a permanent system of record.
 - Do not hardcode credentials, API keys, passwords, Gmail accounts, OAuth
   secrets, or personal data.
 - Use Streamlit secrets or environment variables for credentials.
+- Set `APP_PASSWORD` in Streamlit Secrets before sharing a deployed app link.
 - Real sending must remain disabled until preview, dry-run, confirmation, and
   logging flows are stable.
 - No send action should run automatically on page load.

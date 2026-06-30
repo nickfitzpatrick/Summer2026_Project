@@ -9,6 +9,7 @@ and faculty availability via Google Forms, then build the optimal schedule.
 
 import os
 import sys
+import hmac
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
@@ -38,6 +39,40 @@ BAND = "#edf3f6"
 INK = "#12100b"
 
 st.set_page_config(page_title="Visit-Day Matching", layout="wide", page_icon=LOGO)
+
+
+def _configured_password():
+    try:
+        return st.secrets.get("APP_PASSWORD", "")
+    except Exception:
+        return os.environ.get("APP_PASSWORD", "")
+
+
+def require_login():
+    password = _configured_password()
+    if not password:
+        st.warning(
+            "Access password is not configured. Set APP_PASSWORD in Streamlit Secrets "
+            "before using real visit-day data."
+        )
+        return
+
+    if st.session_state.get("authenticated"):
+        return
+
+    st.markdown("## IEOR Visit-Day Matching")
+    st.caption("Enter the internal access password to continue.")
+    entered = st.text_input("Password", type="password")
+    if st.button("Sign in", type="primary"):
+        if hmac.compare_digest(entered, password):
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+    st.stop()
+
+
+require_login()
 
 st.markdown(
     f"""

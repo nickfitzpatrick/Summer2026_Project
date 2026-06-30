@@ -179,3 +179,7 @@ before sending.
 
 Do not enter credentials or passwords into code files. Use Streamlit secrets or
 environment variables when the deployment owner enables integrations.
+
+For deployed use, the app should ask for an internal password before showing any
+workflow screens. If it does not, ask the deployment owner to set `APP_PASSWORD`
+in Streamlit Secrets before using real data.
