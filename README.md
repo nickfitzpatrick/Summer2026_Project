@@ -12,10 +12,11 @@ the final schedules.
 
 1. Build visit days: set meeting length, buffer time, day hours, and blocked
    events such as lunch or tours.
-2. Load prospective students and preview the student preference form.
+2. Enter prospective student names/emails directly, or import an optional CSV,
+   then preview the student preference form.
 3. Download form templates or upload exported student response CSVs.
-4. Load faculty, preview the faculty availability form, and upload exported
-   faculty response CSVs.
+4. Enter faculty names/emails directly, preview the faculty availability form,
+   and upload exported faculty response CSVs.
 5. Build schedules from demo data, parsed session data, or uploaded CSVs.
 6. Review validation messages before solving.
 7. Review schedule diagnostics after solving.
@@ -51,7 +52,9 @@ pytest
 ## Input schemas
 
 For the scheduler, the collected-data path expects three CSV files.
-Sample files are available in `sample_data/` and through in-app download buttons.
+For small groups, the intake tabs use editable tables so staff can type names
+and emails directly. Sample files are still available in `sample_data/` and
+through optional in-app download buttons.
 
 `faculty.csv`
 

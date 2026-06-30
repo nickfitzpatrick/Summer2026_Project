@@ -29,7 +29,10 @@ the day hours or remove blocks.
 
 Open **Prospective students**.
 
-Upload a CSV with either:
+Enter student names and emails directly in the table. Add rows as needed. This is
+the recommended workflow for a typical cohort of roughly 40 students.
+
+If you already have a file, use the optional CSV import section. The CSV can use:
 
 - `name,email`
 - or `first name,last name,email`
@@ -51,9 +54,14 @@ under **Import student responses**. The app will create downloadable
 
 Open **Faculty availability**.
 
-Upload a faculty CSV. Use **Download sample faculty CSV** if you want to test the
-upload flow without using real faculty data. The app previews the availability
-form based on the visit-day slots configured in step 1.
+Enter faculty names and emails directly in the table. Area is optional. The app
+assigns simple faculty IDs such as `F01` and `F02` for the availability workflow.
+This is the recommended workflow for a small faculty group.
+
+If you already have a file, use the optional CSV import section. Use **Download
+sample faculty CSV** if you want to test the upload flow without using real
+faculty data. The app previews the availability form based on the visit-day slots
+configured in step 1.
 
 For scheduling, the availability file must eventually be converted to:
 
@@ -68,8 +76,8 @@ Google Form manually. After faculty respond, export the response Sheet as CSV an
 upload it under **Import faculty responses**. The app will create downloadable
 `availability.csv`.
 
-Faculty response parsing requires a faculty list with `faculty_id`; otherwise
-the app cannot safely connect a response to the scheduler.
+Faculty response parsing requires faculty IDs. When you use the direct-entry
+table, the app creates those IDs automatically.
 
 ### 4. Build schedules
 

@@ -209,6 +209,46 @@ def spec_template_df(spec):
     return pd.DataFrame(rows)
 
 
+def clean_people_editor(df, add_faculty_ids=False):
+    """Clean direct-entry name/email rows from the Streamlit data editor."""
+    if df is None or df.empty:
+        cols = ["faculty_id", "name", "email"] if add_faculty_ids else ["name", "email"]
+        return pd.DataFrame(columns=cols)
+    out = df.copy()
+    for col in ["name", "email"]:
+        if col not in out.columns:
+            out[col] = ""
+        out[col] = out[col].fillna("").astype(str).str.strip()
+    out = out[(out["name"] != "") | (out["email"] != "")].copy()
+    if add_faculty_ids:
+        out["faculty_id"] = [f"F{i + 1:02d}" for i in range(len(out))]
+        if "area" not in out.columns:
+            out["area"] = ""
+        out["area"] = out["area"].fillna("").astype(str).str.strip()
+        return out[["faculty_id", "name", "area", "email"]]
+    return out[["name", "email"]]
+
+
+def load_csv_into_editor(uploaded_file, state_key, add_faculty_ids=False):
+    if uploaded_file is None:
+        return
+    df = pd.read_csv(uploaded_file)
+    if add_faculty_ids:
+        if "name" not in df.columns:
+            df["name"] = ""
+        if "email" not in df.columns:
+            df["email"] = ""
+        if "area" not in df.columns:
+            df["area"] = ""
+        st.session_state[state_key] = df[["name", "area", "email"]]
+    else:
+        if "name" not in df.columns:
+            df["name"] = ""
+        if "email" not in df.columns:
+            df["email"] = ""
+        st.session_state[state_key] = df[["name", "email"]]
+
+
 def schedule_view(assignments, faculty, grid):
     view = render_schedules(assignments, faculty, grid).reset_index(drop=True)
     view.insert(0, "meeting_id", [f"M{i + 1:03d}" for i in range(len(view))])
@@ -538,23 +578,44 @@ def render_student_intake():
 
     DEFAULT_SUBJECT = "IEOR Visit Day: tell us which faculty you want to meet"
 
-    step(1, "Upload prospective students")
+    step(1, "Enter prospective students")
     st.caption(
-        "Upload a CSV with columns: name (or first name + last name) and email. "
-        "Each student will be emailed the preference form; responses collect in a "
-        "Google Sheet the matcher can read."
+        "Type student names and emails directly. Add rows as needed. CSV upload is "
+        "still available below if you already have a file."
     )
 
-    sample_download("test_students.csv", "Download sample student CSV")
-    stu_file = st.file_uploader("Student list (CSV)", type="csv", key="intake_csv")
+    if "student_people_editor" not in st.session_state:
+        st.session_state["student_people_editor"] = pd.DataFrame(
+            [{"name": "", "email": ""} for _ in range(8)]
+        )
+    edited_students = st.data_editor(
+        st.session_state["student_people_editor"],
+        num_rows="dynamic",
+        hide_index=True,
+        use_container_width=True,
+        key="student_people_editor_widget",
+        column_config={
+            "name": st.column_config.TextColumn("Student name"),
+            "email": st.column_config.TextColumn("Email"),
+        },
+    )
+    st.session_state["student_people_editor"] = edited_students
 
-    if stu_file is not None:
-        st.session_state["recipients"] = pd.read_csv(stu_file)
-        st.session_state["recipients_source"] = f"uploaded file: {stu_file.name}"
+    with st.expander("Optional: import students from CSV", expanded=False):
+        sample_download("test_students.csv", "Download sample student CSV")
+        stu_file = st.file_uploader("Student list (CSV)", type="csv", key="intake_csv")
+        if stu_file is not None:
+            load_csv_into_editor(stu_file, "student_people_editor")
+            st.session_state.pop("student_people_editor_widget", None)
+            st.success("CSV loaded into the editable table above.")
+            st.rerun()
 
-    recipients = st.session_state.get("recipients")
-    if recipients is None:
-        st.info("Upload a student CSV to continue. Use the sample CSV if you want to test the workflow.")
+    recipients = clean_people_editor(st.session_state["student_people_editor"])
+    st.session_state["recipients"] = recipients
+    st.session_state["recipients_source"] = "direct entry table"
+
+    if recipients.empty:
+        st.info("Enter at least one student name and email to continue.")
         return
 
     notice(f"Loaded {len(recipients)} students ({st.session_state['recipients_source']}).")
@@ -671,22 +732,45 @@ def render_faculty_intake():
         st.warning("Set up the visit days first (no meeting slots defined yet).")
         return
 
-    step(1, "Upload faculty")
+    step(1, "Enter faculty")
     st.caption(
-        "Upload a CSV with columns: faculty_id, name, area, and email. "
-        "faculty_id is needed to convert responses into scheduler-ready availability."
+        "Type faculty names and emails directly. The app will assign simple faculty IDs "
+        "for the availability workflow. Area is optional."
     )
 
-    sample_download("test_faculty.csv", "Download sample faculty CSV")
-    fac_file = st.file_uploader("Faculty list (CSV)", type="csv", key="fac_csv")
+    if "faculty_people_editor" not in st.session_state:
+        st.session_state["faculty_people_editor"] = pd.DataFrame(
+            [{"name": "", "area": "", "email": ""} for _ in range(6)]
+        )
+    edited_faculty = st.data_editor(
+        st.session_state["faculty_people_editor"],
+        num_rows="dynamic",
+        hide_index=True,
+        use_container_width=True,
+        key="faculty_people_editor_widget",
+        column_config={
+            "name": st.column_config.TextColumn("Faculty name"),
+            "area": st.column_config.TextColumn("Area (optional)"),
+            "email": st.column_config.TextColumn("Email"),
+        },
+    )
+    st.session_state["faculty_people_editor"] = edited_faculty
 
-    if fac_file is not None:
-        st.session_state["fac_recipients"] = pd.read_csv(fac_file)
-        st.session_state["fac_source"] = f"uploaded file: {fac_file.name}"
+    with st.expander("Optional: import faculty from CSV", expanded=False):
+        sample_download("test_faculty.csv", "Download sample faculty CSV")
+        fac_file = st.file_uploader("Faculty list (CSV)", type="csv", key="fac_csv")
+        if fac_file is not None:
+            load_csv_into_editor(fac_file, "faculty_people_editor", add_faculty_ids=True)
+            st.session_state.pop("faculty_people_editor_widget", None)
+            st.success("CSV loaded into the editable table above.")
+            st.rerun()
 
-    recipients = st.session_state.get("fac_recipients")
-    if recipients is None:
-        st.info("Upload a faculty CSV to continue. Use the sample CSV if you want to test the workflow.")
+    recipients = clean_people_editor(st.session_state["faculty_people_editor"], add_faculty_ids=True)
+    st.session_state["fac_recipients"] = recipients
+    st.session_state["fac_source"] = "direct entry table"
+
+    if recipients.empty:
+        st.info("Enter at least one faculty name and email to continue.")
         return
 
     notice(f"Loaded {len(recipients)} faculty ({st.session_state['fac_source']}).")
