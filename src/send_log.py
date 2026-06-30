@@ -15,15 +15,19 @@ LOG_PATH = os.path.join(HERE, "data", "send_log.json")
 
 
 def record_send(n_recipients: int, subject: str, form_url: str = "",
-                sheet_url: str = "", simulated: bool = True, key: str = "student") -> dict:
+                sheet_url: str = "", simulated: bool = True, key: str = "student",
+                body: str = "", dry_run: bool = True, status: str = "recorded") -> dict:
     """Append a send entry and return it. key tags the audience (student/faculty)."""
     entry = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "n_recipients": n_recipients,
         "subject": subject,
+        "body_preview": body,
         "form_url": form_url,
         "sheet_url": sheet_url,
         "simulated": simulated,
+        "dry_run": dry_run,
+        "status": status,
         "audience": key,
     }
     log = _read()
@@ -44,10 +48,31 @@ def all_sends() -> list:
     return _read()
 
 
+def to_csv() -> str:
+    """Return the send log as CSV text without requiring pandas."""
+    rows = _read()
+    headers = [
+        "timestamp", "audience", "n_recipients", "subject", "dry_run",
+        "simulated", "status", "form_url", "sheet_url", "body_preview",
+    ]
+    if not rows:
+        return ",".join(headers) + "\n"
+    import csv
+    import io
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=headers, extrasaction="ignore")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
+    return buf.getvalue()
+
+
 def pretty_time(iso: str) -> str:
     """Human-friendly timestamp, e.g. 'June 25, 2026 at 2:14 PM'."""
     dt = datetime.fromisoformat(iso)
-    return dt.strftime("%B %-d, %Y at %-I:%M %p")
+    hour = dt.strftime("%I").lstrip("0") or "0"
+    return f"{dt.strftime('%B')} {dt.day}, {dt.year} at {hour}:{dt.strftime('%M %p')}"
 
 
 def _read() -> list:

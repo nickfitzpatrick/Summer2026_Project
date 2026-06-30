@@ -1,10 +1,12 @@
-# Google setup for live form sending
+# Google setup for form and email integration
 
-The Collect Preferences tab works in preview (dry-run) mode with no setup: it
-validates the student list and shows exactly what would be sent. To actually
-create the form and email students, a developer does the one-time setup below.
-Non-technical staff never touch this; once it is done, staff just upload a CSV
-and click the button.
+The app currently supports preview and dry-run workflows only. It validates
+recipient lists, previews form content, previews email subjects and bodies, and
+records dry-run send logs. It does not send real email or create live Google
+Forms automatically yet.
+
+This document describes what a developer must configure before a future guarded
+live path can be enabled. Non-technical staff should not handle credentials.
 
 ## What gets wired
 
@@ -35,11 +37,13 @@ domain-wide delegation instead, which avoids the per-run browser prompt. Use thi
 if a shared admin account should own everything. Either way, only `_build_live`
 in `src/google_intake.py` changes.
 
-## Implementing the live path
+## Implementing the live path later
 
 All Google calls live in one function: `_build_live` in `src/google_intake.py`.
-It currently raises `NotImplementedError`. To turn sending on, implement it with
-`google-api-python-client` and `google-auth`:
+It currently raises `NotImplementedError`, and the Streamlit UI does not call it
+for real sending. To turn sending on later, implement it with
+`google-api-python-client` and `google-auth`, then keep preview, dry-run, final
+confirmation, and send-log requirements in place:
 
 ```
 pip install google-api-python-client google-auth google-auth-oauthlib
@@ -53,8 +57,9 @@ Steps inside `_build_live`:
 - for each recipient, send the form URL via the Gmail API,
 - set `form_url` and `sheet_url` on the returned `IntakeResult`.
 
-Nothing else in the app changes: the Collect Preferences tab already calls
-`send_intake(..., dry_run=False)` and renders whatever URLs come back.
+Only enable the live call after dry-run behavior is stable and reviewed. The
+button must remain disabled until staff have previewed recipients, subject, and
+body, and explicitly confirmed the send.
 
 ## After responses come in
 

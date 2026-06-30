@@ -23,6 +23,10 @@ Live Google Forms, Google Sheets, and Gmail automation are intentionally still
 behind a stubbed integration path. Until credentials are provisioned and tested,
 the app should use preview, dry-run, template, and CSV fallback workflows.
 
+The student and faculty send sections are dry-run only in this version. Staff can
+preview recipients, subject, and body, then record a dry-run send log. No email is
+sent by the app.
+
 ## Run locally
 
 ```bash
@@ -116,6 +120,7 @@ Downloadable files:
 - `faculty_schedules.csv`
 - `student_email_text.csv`
 - `faculty_email_text.csv`
+- `send_log.csv`
 
 Staff should download these files after each final run because Streamlit session
 state is not a permanent system of record.

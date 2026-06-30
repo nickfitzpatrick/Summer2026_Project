@@ -155,6 +155,33 @@ def rule():
     st.markdown('<hr class="rule">', unsafe_allow_html=True)
 
 
+def send_log_download(send_log_module):
+    st.download_button(
+        "Download send log CSV",
+        send_log_module.to_csv().encode("utf-8"),
+        "send_log.csv",
+        "text/csv",
+    )
+
+
+def message_body(audience):
+    if audience == "student":
+        return (
+            "Hello,\n\n"
+            "Please complete the IEOR Visit Day faculty preference form so we can "
+            "build your meeting schedule.\n\n"
+            "Form link: [form link will be inserted here]\n\n"
+            "Thank you,\nIEOR Staff"
+        )
+    return (
+        "Hello,\n\n"
+        "Please complete the IEOR Visit Day availability form so we can schedule "
+        "prospective student meetings around your available time windows.\n\n"
+        "Form link: [form link will be inserted here]\n\n"
+        "Thank you,\nIEOR Staff"
+    )
+
+
 def _tl_row(time_label, css, text, tag=""):
     tag_html = f'<span class="tl-tag">{tag}</span>' if tag else ""
     return (f'<div class="tl-row"><div class="tl-time">{time_label}</div>'
@@ -466,26 +493,31 @@ def render_student_intake():
             f"Last sent {send_log.pretty_time(last['timestamp'])} to "
             f"{last['n_recipients']} students{tag}."
         )
-    st.caption(
-        "Live sending requires Google credentials (see SETUP_GOOGLE.md). Until "
-        "those are set up, this records the send and confirms without emailing."
+    st.warning("Live email sending is disabled in this build. Use this section to preview and record a dry run.")
+    st.markdown("**Recipient preview**")
+    st.dataframe(pd.DataFrame(result.recipients), hide_index=True, use_container_width=True)
+    body = st.text_area("Email body preview", value=message_body("student"), height=180, key="student_body")
+    dry_run = st.checkbox("Dry run only - do not send email", value=True, disabled=True, key="student_dry")
+    confirmed = st.checkbox(
+        "I reviewed the recipients, subject, and body for this dry run.",
+        key="student_confirm",
     )
 
-    if st.button("Send form to students", type="primary", disabled=not result.ok):
-        try:
-            live = send_intake(recipients, roster_path=ROSTER_XLSX, dry_run=False)
-            entry = send_log.record_send(
-                live.n_recipients, subject, live.form_url, live.sheet_url, simulated=False,
-            )
-            notice(f"Form created: {live.form_url}")
-            notice(f"Responses sheet: {live.sheet_url}")
-        except NotImplementedError:
-            entry = send_log.record_send(result.n_recipients, subject, simulated=True)
-        st.success(
-            f"Sent on {send_log.pretty_time(entry['timestamp'])} to "
-            f"{entry['n_recipients']} students."
-            + ("  (simulated - no email sent yet)" if entry["simulated"] else "")
+    if st.button("Record student dry run", type="primary", disabled=not (result.ok and dry_run and confirmed)):
+        entry = send_log.record_send(
+            result.n_recipients,
+            subject,
+            simulated=True,
+            key="student",
+            body=body,
+            dry_run=True,
+            status="dry_run_recorded",
         )
+        st.success(
+            f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
+            f"for {entry['n_recipients']} students. No email was sent."
+        )
+    send_log_download(send_log)
 
 
 with tabs[2]:
@@ -574,29 +606,31 @@ def render_faculty_intake():
             f"Last sent {send_log.pretty_time(last['timestamp'])} to "
             f"{last['n_recipients']} faculty{tag}."
         )
-    st.caption(
-        "Live sending requires Google credentials (see SETUP_GOOGLE.md). Until "
-        "those are set up, this records the send and confirms without emailing."
+    st.warning("Live email sending is disabled in this build. Use this section to preview and record a dry run.")
+    st.markdown("**Recipient preview**")
+    st.dataframe(pd.DataFrame(result.recipients), hide_index=True, use_container_width=True)
+    body = st.text_area("Email body preview", value=message_body("faculty"), height=180, key="faculty_body")
+    dry_run = st.checkbox("Dry run only - do not send email", value=True, disabled=True, key="faculty_dry")
+    confirmed = st.checkbox(
+        "I reviewed the recipients, subject, and body for this dry run.",
+        key="faculty_confirm",
     )
 
-    if st.button("Send form to faculty", type="primary", disabled=not result.ok):
-        try:
-            live = send_intake(recipients, spec=spec, dry_run=False)
-            entry = send_log.record_send(
-                live.n_recipients, subject, live.form_url, live.sheet_url,
-                simulated=False, key="faculty",
-            )
-            notice(f"Form created: {live.form_url}")
-            notice(f"Responses sheet: {live.sheet_url}")
-        except NotImplementedError:
-            entry = send_log.record_send(
-                result.n_recipients, subject, simulated=True, key="faculty"
-            )
-        st.success(
-            f"Sent on {send_log.pretty_time(entry['timestamp'])} to "
-            f"{entry['n_recipients']} faculty."
-            + ("  (simulated - no email sent yet)" if entry["simulated"] else "")
+    if st.button("Record faculty dry run", type="primary", disabled=not (result.ok and dry_run and confirmed)):
+        entry = send_log.record_send(
+            result.n_recipients,
+            subject,
+            simulated=True,
+            key="faculty",
+            body=body,
+            dry_run=True,
+            status="dry_run_recorded",
         )
+        st.success(
+            f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
+            f"for {entry['n_recipients']} faculty. No email was sent."
+        )
+    send_log_download(send_log)
 
     rule()
     step(4, "See who has responded")
