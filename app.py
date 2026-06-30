@@ -195,6 +195,90 @@ def spec_template_df(spec):
     return pd.DataFrame(rows)
 
 
+def schedule_view(assignments, faculty, grid):
+    view = render_schedules(assignments, faculty, grid).reset_index(drop=True)
+    view.insert(0, "meeting_id", [f"M{i + 1:03d}" for i in range(len(view))])
+    return view
+
+
+def can_add_assignment(assignments, student_id, faculty_id, slot_id):
+    conflicts = []
+    if ((assignments["student_id"] == student_id) & (assignments["slot_id"] == slot_id)).any():
+        conflicts.append("That student already has a meeting in this slot.")
+    if ((assignments["faculty_id"] == faculty_id) & (assignments["slot_id"] == slot_id)).any():
+        conflicts.append("That faculty member already has a meeting in this slot.")
+    if ((assignments["student_id"] == student_id) & (assignments["faculty_id"] == faculty_id)).any():
+        conflicts.append("That student and faculty member already meet in this schedule.")
+    return conflicts
+
+
+def render_manual_review(result):
+    st.caption(
+        "Use this table for small corrections after reviewing the schedule. "
+        "Manual changes are held in the current app session; download exports again after editing."
+    )
+    assignments = result["assignments"].copy()
+    if "locked" not in assignments.columns:
+        assignments["locked"] = False
+
+    view = schedule_view(assignments, result["faculty"], result["grid"])
+    st.dataframe(view, hide_index=True, use_container_width=True)
+
+    st.markdown("**Lock or remove a meeting**")
+    meeting_ids = view["meeting_id"].tolist()
+    selected = st.selectbox("Meeting", meeting_ids, key="manual_selected_meeting")
+    row_idx = int(view.loc[view["meeting_id"] == selected, "assignment_index"].iloc[0]) if selected in meeting_ids else None
+    c1, c2, c3 = st.columns(3)
+    if c1.button("Lock selected meeting", disabled=row_idx is None):
+        assignments.loc[row_idx, "locked"] = True
+        result["assignments"] = assignments
+        st.session_state["result"] = result
+        st.rerun()
+    if c2.button("Unlock selected meeting", disabled=row_idx is None):
+        assignments.loc[row_idx, "locked"] = False
+        result["assignments"] = assignments
+        st.session_state["result"] = result
+        st.rerun()
+    locked = bool(assignments.loc[row_idx, "locked"]) if row_idx is not None else False
+    if c3.button("Remove selected meeting", disabled=(row_idx is None or locked)):
+        result["assignments"] = assignments.drop(assignments.index[row_idx]).reset_index(drop=True)
+        st.session_state["result"] = result
+        st.rerun()
+    if locked:
+        st.info("Unlock this meeting before removing it.")
+
+    st.markdown("**Manually add a meeting**")
+    students = sorted(result["preferences"]["student_id"].astype(str).unique())
+    faculty_options = result["faculty"][["faculty_id", "name"]].copy()
+    faculty_options["label"] = faculty_options["faculty_id"].astype(str) + " - " + faculty_options["name"].astype(str)
+    slots = result["grid"][["slot_id", "day", "start_time", "end_time"]].copy()
+    slots["label"] = (
+        slots["slot_id"].astype(str) + " | Day " + slots["day"].astype(str)
+        + " " + slots["start_time"].astype(str) + "-" + slots["end_time"].astype(str)
+    )
+
+    a1, a2, a3 = st.columns(3)
+    sid = a1.selectbox("Student", students, key="manual_add_student")
+    flabel = a2.selectbox("Faculty", faculty_options["label"], key="manual_add_faculty")
+    slabel = a3.selectbox("Slot", slots["label"], key="manual_add_slot")
+    fid = faculty_options.loc[faculty_options["label"] == flabel, "faculty_id"].iloc[0]
+    slot_id = slots.loc[slots["label"] == slabel, "slot_id"].iloc[0]
+    conflicts = can_add_assignment(assignments, sid, fid, slot_id)
+    if conflicts:
+        for conflict in conflicts:
+            st.warning(conflict)
+    if st.button("Add meeting", disabled=bool(conflicts)):
+        new_row = pd.DataFrame([{
+            "student_id": sid,
+            "faculty_id": fid,
+            "slot_id": slot_id,
+            "locked": True,
+        }])
+        result["assignments"] = pd.concat([assignments, new_row], ignore_index=True)
+        st.session_state["result"] = result
+        st.rerun()
+
+
 def _tl_row(time_label, css, text, tag=""):
     tag_html = f'<span class="tl-tag">{tag}</span>' if tag else ""
     return (f'<div class="tl-row"><div class="tl-time">{time_label}</div>'
@@ -849,6 +933,7 @@ def render_matching():
         if assignments.empty:
             st.error(f"No feasible schedule found (solver status: {status}). Check availability data.")
         else:
+            assignments["locked"] = False
             st.session_state["result"] = {
                 "assignments": assignments,
                 "faculty": faculty,
@@ -895,8 +980,8 @@ def render_matching():
         c3.metric("Avg meetings/student", f"{dsum['avg_meetings_per_student']:.1f}")
         c4.metric("Lowest meetings", f"{dsum['lowest_student_meetings']}")
 
-        view_stu, view_fac, view_diag, view_exports = st.tabs([
-            "By student", "By faculty", "Diagnostics", "Exports"
+        view_stu, view_fac, view_manual, view_diag, view_exports = st.tabs([
+            "By student", "By faculty", "Manual review", "Diagnostics", "Exports"
         ])
         with view_stu:
             pick = st.selectbox("View a student", sorted(sched["student_id"].unique()))
@@ -910,6 +995,8 @@ def render_matching():
                 sched[sched["faculty"] == fpick][["day", "start", "end", "student_id"]],
                 hide_index=True, use_container_width=True,
             )
+        with view_manual:
+            render_manual_review(r)
         with view_diag:
             st.markdown("**Faculty capacity and utilization**")
             st.dataframe(dx["faculty_capacity"], hide_index=True, use_container_width=True)

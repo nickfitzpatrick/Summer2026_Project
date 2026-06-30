@@ -15,10 +15,11 @@ def render_schedules(assignments, faculty, grid):
     times = grid.set_index("slot_id")[["day", "start_time", "end_time"]].to_dict("index")
 
     rows = []
-    for _, a in assignments.iterrows():
+    for idx, a in assignments.iterrows():
         t = times[a["slot_id"]]
         rows.append(
             {
+                "assignment_index": idx,
                 "student_id": a["student_id"],
                 "faculty_id": a["faculty_id"],
                 "faculty": fac_name[a["faculty_id"]],
@@ -26,6 +27,7 @@ def render_schedules(assignments, faculty, grid):
                 "start": t["start_time"],
                 "end": t["end_time"],
                 "slot_id": a["slot_id"],
+                "locked": bool(a.get("locked", False)),
             }
         )
     sched = pd.DataFrame(rows).sort_values(["student_id", "day", "start"])

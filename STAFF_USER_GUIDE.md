@@ -103,7 +103,22 @@ After solving, review:
 These diagnostics help explain bottlenecks such as popular faculty with limited
 availability or students with too few ranked preferences.
 
-### 6. Download outputs
+### 6. Make manual adjustments
+
+Open **Manual review** after a schedule is produced.
+
+Staff can:
+
+- lock a meeting so it is marked as intentionally kept
+- unlock a meeting
+- remove an unlocked meeting
+- manually add a meeting if the student and faculty do not already have a
+  conflict in that time slot
+
+Manual additions are locked by default. This version does not rerun the optimizer
+around locked meetings; it is intended for small final corrections.
+
+### 7. Download outputs
 
 Open the **Exports** tab and download:
 

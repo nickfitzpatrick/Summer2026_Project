@@ -4,6 +4,7 @@ import pandas as pd
 
 
 def build_export_tables(schedule):
+    schedule = schedule.drop(columns=["assignment_index"], errors="ignore")
     master = schedule.sort_values(["day", "start", "faculty", "student_id"]).copy()
     student = schedule.sort_values(["student_id", "day", "start"]).copy()
     faculty = schedule.sort_values(["faculty", "day", "start", "student_id"]).copy()

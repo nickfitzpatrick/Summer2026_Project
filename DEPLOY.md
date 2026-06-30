@@ -65,6 +65,24 @@ That file must not be committed.
 Every push to the deployed branch auto-redeploys. No manual step. Teammates just
 refresh the URL.
 
+## Validation before deploying
+
+Run these checks before pushing a deployment branch:
+
+```bash
+python tests/validation_harness.py
+```
+
+If `pytest` is available, also run:
+
+```bash
+pytest
+```
+
+The bundled harness covers the intake pipeline, input validation, and faculty
+availability CSV adapter. In a full local environment with `ortools` installed,
+the pipeline test also verifies the solver path.
+
 ## Notes and gotchas
 
 - `requirements.txt` already pins `ortools`, `streamlit`, `pandas`, `numpy`,
