@@ -44,7 +44,7 @@ st.markdown(
     <style>
       /* base type: comfortable, not oversized */
       html, body, [class*="css"], .stMarkdown, p, label, .stCaption {{ font-size: 0.95rem; }}
-      .block-container {{ padding-top: 1.2rem; max-width: 1240px; padding-left: 2.2rem; padding-right: 2.2rem; }}
+      .block-container {{ padding-top: 2.4rem; max-width: 1240px; padding-left: 2.2rem; padding-right: 2.2rem; }}
       h1, h2, h3, h4 {{ color: {NAVY}; font-weight: 700; letter-spacing: -0.01em; }}
       p {{ line-height: 1.45; }}
 
@@ -116,7 +116,7 @@ st.markdown(
       .ov h4 {{ margin: 0.1rem 0 0.3rem; font-size: 1.08rem; }}
       .ov p {{ color: {INK}; margin: 0; font-size: 0.94rem; line-height: 1.45; }}
       @media (max-width: 800px) {{
-        .block-container {{ padding-left: 1rem; padding-right: 1rem; }}
+        .block-container {{ padding-top: 2.6rem; padding-left: 1rem; padding-right: 1rem; }}
         .ovgrid {{ grid-template-columns: 1fr; }}
         .cardrow {{ flex-direction: column; }}
       }}
