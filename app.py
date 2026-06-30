@@ -499,68 +499,64 @@ with tabs[0]:
 def render_visit_days():
     plans = get_plans()
 
-    step(1, "Set how long each meeting lasts")
-    st.caption(
-        "This decides how many meetings fit in a day. The buffer is travel and reset "
-        "time between meetings."
-    )
-    s1, s2 = st.columns(2)
+    step(1, "Meeting setup")
+    s1, s2, s3 = st.columns(3)
     st.session_state["meeting_min"] = s1.number_input(
         "Meeting length (minutes)", 5, 60, st.session_state["meeting_min"], step=5)
     st.session_state["buffer_min"] = s2.number_input(
         "Buffer between meetings (minutes)", 0, 30, st.session_state["buffer_min"], step=5)
     cfg = make_config()
-    st.caption(f"Each meeting takes up a {cfg.slot_minutes}-minute slot.")
+    s3.metric("Each meeting block", f"{cfg.slot_minutes} min")
 
     rule()
 
-    step(2, "Lay out the two visit days")
-    st.caption(
-        "Set when each day starts and ends, then block off any time that is not for "
-        "meetings. Everything you leave open becomes available for student-faculty meetings."
-    )
+    step(2, "Visit-day schedule")
+    st.caption("Set day hours and block only the events that are not available for meetings.")
 
     for plan in plans:
-        st.markdown(f"#### Day {plan.day}")
-        edit_col, view_col = st.columns([1.15, 1])
+        day_grid = build_grid_from_plans([plan], cfg)
+        n = len(day_grid)
+        with st.expander(
+            f"Day {plan.day}: {plan.start}-{plan.end}, {n} meeting slots",
+            expanded=(plan.day == 1),
+        ):
+            edit_col, view_col = st.columns([1.05, 1])
 
-        with edit_col:
-            c1, c2 = st.columns(2)
-            plan.start = c1.text_input("Day start", plan.start, key=f"d{plan.day}_start")
-            plan.end = c2.text_input("Day end", plan.end, key=f"d{plan.day}_end")
+            with edit_col:
+                c1, c2 = st.columns(2)
+                plan.start = c1.text_input("Start", plan.start, key=f"d{plan.day}_start")
+                plan.end = c2.text_input("End", plan.end, key=f"d{plan.day}_end")
 
-            st.markdown("**Blocked events** (not available for meetings)")
-            keep = []
-            for j, blk in enumerate(plan.blocks):
-                bc1, bc2, bc3, bc4 = st.columns([3, 2, 2, 1.4])
-                blk.label = bc1.text_input("Event", blk.label, key=f"d{plan.day}_b{j}_l")
-                blk.start = bc2.text_input("Start", blk.start, key=f"d{plan.day}_b{j}_s")
-                blk.end = bc3.text_input("End", blk.end, key=f"d{plan.day}_b{j}_e")
-                bc4.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
-                if not bc4.button("Remove", key=f"d{plan.day}_b{j}_x",
-                                  use_container_width=True):
-                    keep.append(blk)
-            plan.blocks = keep
+                st.markdown("**Blocked events**")
+                keep = []
+                for j, blk in enumerate(plan.blocks):
+                    bc1, bc2, bc3, bc4 = st.columns([3, 2, 2, 1.2])
+                    blk.label = bc1.text_input("Event", blk.label, key=f"d{plan.day}_b{j}_l")
+                    blk.start = bc2.text_input("Start", blk.start, key=f"d{plan.day}_b{j}_s")
+                    blk.end = bc3.text_input("End", blk.end, key=f"d{plan.day}_b{j}_e")
+                    bc4.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
+                    if not bc4.button("Remove", key=f"d{plan.day}_b{j}_x",
+                                      use_container_width=True):
+                        keep.append(blk)
+                plan.blocks = keep
 
-            if st.button(f"Add event to Day {plan.day}", key=f"d{plan.day}_add"):
-                plan.blocks.append(Block("New event", "10:00", "10:30"))
-                st.rerun()
+                if st.button(f"Add blocked event", key=f"d{plan.day}_add"):
+                    plan.blocks.append(Block("New event", "10:00", "10:30"))
+                    st.rerun()
 
-        with view_col:
-            day_grid = build_grid_from_plans([plan], cfg)
-            n = len(day_grid)
-            st.caption(f"Day {plan.day} schedule  -  {n} meeting slot{'s' if n != 1 else ''}")
-            render_day_timeline(plan)
-
-        rule()
+            with view_col:
+                st.caption("Preview")
+                render_day_timeline(plan)
 
     st.session_state["plans"] = plans
 
     grid = build_grid_from_plans(plans, cfg)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total slots", len(grid))
+    c2.metric("Visit days", len(plans))
+    c3.metric("Blocked events", sum(len(p.blocks) for p in plans))
     if grid.empty:
         st.error("No open meeting slots yet. Widen the day hours or remove some blocks.")
-    else:
-        notice(f"{len(grid)} total meeting slots across the two days.")
 
 
 with tabs[1]:
@@ -1058,6 +1054,16 @@ def render_matching():
             with st.expander("Open manual adjustment tools", expanded=False):
                 render_manual_review(r)
         with view_diag:
+            st.markdown("**Things to review**")
+            for note in dx.get("notes", []):
+                if note["level"] == "Action":
+                    st.error(f"{note['title']}: {note['detail']}")
+                elif note["level"] == "Bottleneck":
+                    st.warning(f"{note['title']}: {note['detail']}")
+                elif note["level"] == "OK":
+                    st.success(f"{note['title']}: {note['detail']}")
+                else:
+                    st.info(f"{note['title']}: {note['detail']}")
             with st.expander("Faculty capacity and utilization", expanded=True):
                 st.dataframe(dx["faculty_capacity"], hide_index=True, use_container_width=True)
             with st.expander("Student outcomes", expanded=False):

@@ -106,6 +106,9 @@ because they may explain sparse or uneven schedules.
 
 After solving, review:
 
+- things to review, which highlights issues such as faculty with no meetings,
+  faculty nobody selected, students with weak outcomes, and popular faculty
+  bottlenecks
 - total meetings
 - capacity utilization
 - average meetings per student

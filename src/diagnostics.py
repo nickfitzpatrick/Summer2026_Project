@@ -22,6 +22,7 @@ def build_diagnostics(assignments, faculty, availability, preferences, grid):
     ]
     if not unused.empty:
         warnings.append(f"{len(unused)} available faculty have no scheduled meetings.")
+    notes = _staff_notes(faculty_capacity, student_outcomes, demand, unassigned)
 
     return {
         "summary": summary,
@@ -30,7 +31,103 @@ def build_diagnostics(assignments, faculty, availability, preferences, grid):
         "faculty_demand": demand,
         "unassigned_preferences": unassigned,
         "warnings": warnings,
+        "notes": notes,
     }
+
+
+def _staff_notes(faculty_capacity, student_outcomes, demand, unassigned):
+    notes = []
+
+    no_rankings = demand[demand["total_rankings"] == 0]
+    if not no_rankings.empty:
+        names = _names(no_rankings)
+        notes.append({
+            "level": "Review",
+            "title": f"{len(no_rankings)} faculty were not selected by any student",
+            "detail": (
+                f"{names}. Consider whether these faculty should remain in the form, "
+                "or whether students need clearer research-area guidance."
+            ),
+        })
+
+    available_unused = faculty_capacity[
+        (faculty_capacity["available_slots"] > 0) & (faculty_capacity["scheduled_meetings"] == 0)
+    ]
+    if not available_unused.empty:
+        names = _names(available_unused)
+        notes.append({
+            "level": "Review",
+            "title": f"{len(available_unused)} available faculty received no meetings",
+            "detail": (
+                f"{names}. This can happen when no students ranked them or when higher-priority "
+                "matches used the available slots."
+            ),
+        })
+
+    no_availability = faculty_capacity[faculty_capacity["available_slots"] == 0]
+    if not no_availability.empty:
+        notes.append({
+            "level": "Action",
+            "title": f"{len(no_availability)} faculty have no availability",
+            "detail": f"{_names(no_availability)}. Ask for availability or remove them before the final run.",
+        })
+
+    bottlenecks = demand[
+        (demand["top3_rankings"] >= 3) & (demand["unmet_rankings"] > demand["scheduled_meetings"])
+    ].head(5)
+    if not bottlenecks.empty:
+        notes.append({
+            "level": "Bottleneck",
+            "title": "Popular faculty may be limiting student satisfaction",
+            "detail": (
+                f"{_names(bottlenecks)}. If possible, add availability for these faculty "
+                "or ask students for backup preferences."
+            ),
+        })
+
+    low_students = student_outcomes[
+        (student_outcomes["meetings"] == 0) | (student_outcomes["top3_met"] == 0)
+    ].head(8)
+    if not low_students.empty:
+        notes.append({
+            "level": "Action",
+            "title": f"{len(low_students)} student(s) need a closer look",
+            "detail": (
+                "These students received no meetings or no top-3 meetings: "
+                + ", ".join(low_students["student_id"].astype(str).tolist())
+                + ". Consider manual adjustment or collecting more preferences."
+            ),
+        })
+
+    high_rank_unassigned = unassigned[unassigned["rank"] <= 2].head(8)
+    if not high_rank_unassigned.empty:
+        notes.append({
+            "level": "Review",
+            "title": "Some first- or second-choice preferences were not assigned",
+            "detail": (
+                "Examples: "
+                + "; ".join(
+                    f"{r.student_id} -> {r.faculty} (rank {r.rank})"
+                    for r in high_rank_unassigned.itertuples()
+                )
+            ),
+        })
+
+    if not notes:
+        notes.append({
+            "level": "OK",
+            "title": "No major scheduling issues detected",
+            "detail": "Review the detailed tables, then export the final schedules.",
+        })
+    return notes
+
+
+def _names(df, limit=6):
+    names = df["name"].astype(str).tolist()
+    shown = ", ".join(names[:limit])
+    if len(names) > limit:
+        shown += f", and {len(names) - limit} more"
+    return shown
 
 
 def _summary(assignments, availability, preferences, student_outcomes):
