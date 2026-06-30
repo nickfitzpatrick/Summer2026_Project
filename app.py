@@ -43,17 +43,17 @@ st.markdown(
     f"""
     <style>
       /* base type: comfortable, not oversized */
-      html, body, [class*="css"], .stMarkdown, p, label, .stCaption {{ font-size: 0.96rem; }}
-      .block-container {{ padding-top: 2.4rem; max-width: 1040px; }}
+      html, body, [class*="css"], .stMarkdown, p, label, .stCaption {{ font-size: 0.95rem; }}
+      .block-container {{ padding-top: 1.2rem; max-width: 1240px; padding-left: 2.2rem; padding-right: 2.2rem; }}
       h1, h2, h3, h4 {{ color: {NAVY}; font-weight: 700; letter-spacing: -0.01em; }}
-      p {{ line-height: 1.55; }}
+      p {{ line-height: 1.45; }}
 
       /* hide the (now empty) sidebar entirely */
       section[data-testid="stSidebar"] {{ display: none; }}
 
       /* tab bar: roomier, clearer active state */
-      .stTabs [data-baseweb="tab-list"] {{ gap: 0.4rem; border-bottom: 2px solid {BAND}; }}
-      .stTabs [data-baseweb="tab"] {{ font-size: 0.96rem; font-weight: 600; padding: 0.5rem 0.9rem; }}
+      .stTabs [data-baseweb="tab-list"] {{ gap: 0.25rem; border-bottom: 2px solid {BAND}; }}
+      .stTabs [data-baseweb="tab"] {{ font-size: 0.95rem; font-weight: 700; padding: 0.45rem 0.75rem; }}
       .stTabs [aria-selected="true"] {{ color: {NAVY}; }}
 
       .stButton > button[kind="primary"] {{
@@ -66,7 +66,7 @@ st.markdown(
       .stButton > button {{ white-space: nowrap; }}
 
       /* numbered step headers */
-      .step {{ color: {NAVY}; font-size: 1.3rem; font-weight: 700; margin: 1.5rem 0 0.6rem; }}
+      .step {{ color: {NAVY}; font-size: 1.18rem; font-weight: 700; margin: 1.05rem 0 0.45rem; }}
       .step span {{
         display: inline-flex; align-items: center; justify-content: center;
         width: 1.75rem; height: 1.75rem; margin-right: 0.55rem; border-radius: 50%;
@@ -74,15 +74,15 @@ st.markdown(
       }}
 
       /* result stat cards */
-      .cardrow {{ display: flex; gap: 1.1rem; margin: 0.5rem 0 1.5rem; }}
+      .cardrow {{ display: flex; gap: 0.8rem; margin: 0.35rem 0 1rem; }}
       .card {{
-        flex: 1; border-radius: 16px; padding: 1.2rem 1.4rem; color: #fff;
+        flex: 1; border-radius: 10px; padding: 0.95rem 1.05rem; color: #fff;
         box-shadow: 0 1px 4px rgba(0,0,0,0.10);
       }}
       .card.navy {{ background: {NAVY}; }}
       .card.gold {{ background: {GOLD}; color: {INK}; }}
       .card .label {{ font-size: 0.92rem; opacity: 0.9; font-weight: 600; }}
-      .card .value {{ font-size: 2.3rem; font-weight: 800; line-height: 1.1; margin-top: 0.2rem; }}
+      .card .value {{ font-size: 2rem; font-weight: 800; line-height: 1.05; margin-top: 0.15rem; }}
       .card.navy .value {{ color: {GOLD}; }}
 
       .tag {{
@@ -98,10 +98,14 @@ st.markdown(
       }}
 
       /* overview cards: numbered, generous, friendly */
+      .ovgrid {{
+        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.8rem; margin-top: 0.6rem;
+      }}
       .ov {{
         display: flex; gap: 1rem; align-items: flex-start;
-        background: #fff; border: 1px solid {BAND}; border-radius: 14px;
-        padding: 1.1rem 1.3rem; margin: 0.8rem 0;
+        background: #fff; border: 1px solid {BAND}; border-radius: 10px;
+        padding: 0.95rem 1rem; margin: 0;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
       }}
       .ov .num {{
@@ -110,15 +114,20 @@ st.markdown(
         background: {NAVY}; color: {GOLD}; font-weight: 800; font-size: 1.1rem;
       }}
       .ov h4 {{ margin: 0.1rem 0 0.3rem; font-size: 1.08rem; }}
-      .ov p {{ color: {INK}; margin: 0; font-size: 0.97rem; line-height: 1.55; }}
+      .ov p {{ color: {INK}; margin: 0; font-size: 0.94rem; line-height: 1.45; }}
+      @media (max-width: 800px) {{
+        .block-container {{ padding-left: 1rem; padding-right: 1rem; }}
+        .ovgrid {{ grid-template-columns: 1fr; }}
+        .cardrow {{ flex-direction: column; }}
+      }}
 
       /* soft divider used to break sections without heavy lines */
-      .rule {{ border: none; border-top: 1px solid {BAND}; margin: 1.5rem 0; }}
+      .rule {{ border: none; border-top: 1px solid {BAND}; margin: 1rem 0; }}
 
       /* scrollable day timeline (Build visit days + Faculty availability) */
       .tl {{
-        border: 1px solid {BAND}; border-radius: 14px; padding: 0.5rem 0.6rem;
-        max-height: 360px; overflow-y: auto; background: #fff;
+        border: 1px solid {BAND}; border-radius: 10px; padding: 0.45rem 0.55rem;
+        max-height: 330px; overflow-y: auto; background: #fff;
       }}
       .tl-row {{ display: flex; align-items: stretch; gap: 0.7rem; margin: 0.15rem 0; }}
       .tl-time {{
@@ -433,11 +442,11 @@ def get_grid():
 
 
 tabs = st.tabs([
-    "Overview",
-    "Build visit days",
-    "Prospective students",
-    "Faculty availability",
-    "Build schedules",
+    "1 Overview",
+    "2 Build visit days",
+    "3 Prospective students",
+    "4 Faculty availability",
+    "5 Build schedules",
 ])
 
 
@@ -465,18 +474,15 @@ with tabs[0]:
          "to schedule student-faculty meetings. You will see a live preview of how many "
          "meeting slots each day has as you make changes."),
         ("Prospective students",
-         "Next, collect each student's preferences. Upload a simple spreadsheet (CSV) "
-         "listing the incoming students and their email addresses. The tool builds a "
-         "Google Form that asks each student to rank the faculty they would most like "
-         "to meet and to choose their research interests. You can preview the exact form "
-         "before sending, then email it to everyone at once. Their answers collect "
-         "automatically in a linked Google Sheet."),
+         "Next, enter student names and emails directly, or import a CSV if one already "
+         "exists. The tool prepares a preference-form template that asks students to rank "
+         "faculty and choose research interests. Email sending stays in dry-run preview "
+         "mode until a live integration is configured."),
         ("Faculty availability",
-         "Now find out when each faculty member is free. Upload a spreadsheet (CSV) of "
-         "faculty and their emails, or load the IEOR roster directly. The tool builds a "
-         "second Google Form that shows each faculty the exact time windows from your "
-         "visit-day setup and asks them to check off when they can take meetings. Preview "
-         "it, then send it to all faculty at once."),
+         "Now collect faculty availability. Enter faculty names and emails directly, "
+         "with optional research areas, and download the availability-form template. "
+         "After responses come back, upload the response CSV and the app converts checked "
+         "time windows into scheduler-ready availability."),
         ("Build schedules",
          "Finally, generate the schedules. The tool takes everything you have collected, "
          "the students' ranked preferences, each faculty member's availability, and your "
@@ -485,12 +491,12 @@ with tabs[0]:
          "possible while making sure no one is left out. You can review the results by "
          "student or by faculty and download them as a spreadsheet."),
     ]
-    for i, (title, body) in enumerate(cards, start=1):
-        st.markdown(
-            f'<div class="ov"><div class="num">{i}</div>'
-            f'<div><h4>{title}</h4><p>{body}</p></div></div>',
-            unsafe_allow_html=True,
-        )
+    card_html = '<div class="ovgrid">' + "".join(
+        f'<div class="ov"><div class="num">{i}</div>'
+        f'<div><h4>{title}</h4><p>{body}</p></div></div>'
+        for i, (title, body) in enumerate(cards, start=1)
+    ) + "</div>"
+    st.markdown(card_html, unsafe_allow_html=True)
 
 
 # =====================================================================
