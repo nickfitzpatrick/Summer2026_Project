@@ -201,16 +201,17 @@ def rule():
     st.markdown('<hr class="rule">', unsafe_allow_html=True)
 
 
-def send_log_download(send_log_module):
+def send_log_download(send_log_module, key):
     st.download_button(
         "Download send log CSV",
         send_log_module.to_csv().encode("utf-8"),
         "send_log.csv",
         "text/csv",
+        key=key,
     )
 
 
-def sample_download(filename, label=None):
+def sample_download(filename, label=None, key=None):
     path = os.path.join(SAMPLE_DIR, filename)
     if not os.path.exists(path):
         return
@@ -220,6 +221,7 @@ def sample_download(filename, label=None):
             f.read(),
             filename,
             "text/csv",
+            key=key or f"sample_download_{filename}",
         )
 
 
@@ -710,7 +712,7 @@ def render_student_intake():
     st.session_state["student_people_editor"] = edited_students
 
     with st.expander("Optional: import students from CSV", expanded=False):
-        sample_download("test_students.csv", "Download sample student CSV")
+        sample_download("test_students.csv", "Download sample student CSV", key="sample_students_download")
         stu_file = st.file_uploader("Student list (CSV)", type="csv", key="intake_csv")
         if stu_file is not None:
             load_csv_into_editor(stu_file, "student_people_editor", add_student_requests=True)
@@ -742,6 +744,7 @@ def render_student_intake():
         spec_template_df(spec).to_csv(index=False).encode("utf-8"),
         "student_preference_form_template.csv",
         "text/csv",
+        key="student_form_template_download",
     )
     with st.expander(f"Preview form questions ({len(spec['questions'])})", expanded=False):
         st.markdown(f"*{spec['description']}*")
@@ -773,12 +776,19 @@ def render_student_intake():
             with st.expander(f"{len(warnings)} student response warning(s)", expanded=True):
                 for w in warnings:
                     st.warning(w)
-        st.download_button("Download preferences.csv", prefs.to_csv(index=False), "preferences.csv", "text/csv")
+        st.download_button(
+            "Download preferences.csv",
+            prefs.to_csv(index=False),
+            "preferences.csv",
+            "text/csv",
+            key="student_preferences_download",
+        )
         st.download_button(
             "Download student_interests.csv",
             interests.to_csv(index=False),
             "student_interests.csv",
             "text/csv",
+            key="student_interests_download",
         )
 
     with st.expander("Optional: preview dry-run email", expanded=False):
@@ -818,7 +828,7 @@ def render_student_intake():
                 f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
                 f"for {entry['n_recipients']} students. No email was sent."
             )
-        send_log_download(send_log)
+        send_log_download(send_log, key="student_send_log_download")
 
 
 with tabs[2]:
@@ -866,7 +876,7 @@ def render_faculty_intake():
     st.session_state["faculty_people_editor"] = edited_faculty
 
     with st.expander("Optional: import faculty from CSV", expanded=False):
-        sample_download("test_faculty.csv", "Download sample faculty CSV")
+        sample_download("test_faculty.csv", "Download sample faculty CSV", key="sample_faculty_download")
         fac_file = st.file_uploader("Faculty list (CSV)", type="csv", key="fac_csv")
         if fac_file is not None:
             load_csv_into_editor(fac_file, "faculty_people_editor", add_faculty_ids=True)
@@ -899,6 +909,7 @@ def render_faculty_intake():
         spec_template_df(spec).to_csv(index=False).encode("utf-8"),
         "faculty_availability_form_template.csv",
         "text/csv",
+        key="faculty_form_template_download",
     )
 
     with st.expander(f"Preview form questions ({len(spec['questions'])})", expanded=False):
@@ -932,7 +943,13 @@ def render_faculty_intake():
             with st.expander(f"{len(warnings)} faculty response warning(s)", expanded=True):
                 for w in warnings:
                     st.warning(w)
-        st.download_button("Download availability.csv", availability.to_csv(index=False), "availability.csv", "text/csv")
+        st.download_button(
+            "Download availability.csv",
+            availability.to_csv(index=False),
+            "availability.csv",
+            "text/csv",
+            key="faculty_availability_download",
+        )
 
     with st.expander("Optional: preview dry-run email", expanded=False):
         last = send_log.last_send(key="faculty")
@@ -971,7 +988,7 @@ def render_faculty_intake():
                 f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
                 f"for {entry['n_recipients']} faculty. No email was sent."
             )
-        send_log_download(send_log)
+        send_log_download(send_log, key="faculty_send_log_download")
 
     with st.expander("Optional: view imported faculty availability", expanded=False):
         if "parsed_availability" not in st.session_state:
@@ -1060,13 +1077,13 @@ def render_matching():
         with st.expander("Download sample scheduler CSVs", expanded=False):
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                sample_download("test_faculty.csv", "faculty.csv sample")
+                sample_download("test_faculty.csv", "faculty.csv sample", key="build_sample_faculty_download")
             with c2:
-                sample_download("test_availability.csv", "availability.csv sample")
+                sample_download("test_availability.csv", "availability.csv sample", key="build_sample_availability_download")
             with c3:
-                sample_download("test_preferences.csv", "preferences.csv sample")
+                sample_download("test_preferences.csv", "preferences.csv sample", key="build_sample_preferences_download")
             with c4:
-                sample_download("test_student_requests.csv", "students.csv sample")
+                sample_download("test_student_requests.csv", "students.csv sample", key="build_sample_students_download")
         fac_f = st.file_uploader("faculty.csv", type="csv")
         avail_f = st.file_uploader("availability.csv", type="csv")
         pref_f = st.file_uploader("preferences.csv", type="csv")
@@ -1214,36 +1231,42 @@ def render_matching():
                 to_csv_bytes(exports["master_schedule"]),
                 "master_schedule.csv",
                 "text/csv",
+                key="export_master_schedule_download",
             )
             st.download_button(
                 "Download student schedules CSV",
                 to_csv_bytes(exports["student_schedules"]),
                 "student_schedules.csv",
                 "text/csv",
+                key="export_student_schedules_download",
             )
             st.download_button(
                 "Download faculty schedules CSV",
                 to_csv_bytes(exports["faculty_schedules"]),
                 "faculty_schedules.csv",
                 "text/csv",
+                key="export_faculty_schedules_download",
             )
             st.download_button(
                 "Download student email text CSV",
                 to_csv_bytes(exports["student_email_text"]),
                 "student_email_text.csv",
                 "text/csv",
+                key="export_student_email_text_download",
             )
             st.download_button(
                 "Download faculty email text CSV",
                 to_csv_bytes(exports["faculty_email_text"]),
                 "faculty_email_text.csv",
                 "text/csv",
+                key="export_faculty_email_text_download",
             )
             st.download_button(
                 "Download student diagnostics CSV",
                 to_csv_bytes(exports["student_diagnostics"]),
                 "student_diagnostics.csv",
                 "text/csv",
+                key="export_student_diagnostics_download",
             )
 
 
