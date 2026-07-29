@@ -16,14 +16,15 @@ import os
 
 from roster import load_roster, CANONICAL_AREAS
 
-TOP_N = 8  # how many faculty a student ranks; matches Config.prefs_per_student
+TOP_N = 8  # maximum number of faculty a student can rank
+REQUIRED_RANKS = 3
 
 # Fixed question titles. These double as response-sheet column headers, so the
 # adapter keys off them. Do not rename without updating the adapter in lockstep.
 Q_FIRST = "First Name"
 Q_LAST = "Last Name"
 Q_EMAIL = "Email"
-Q_TOPSET = f"Select your top {TOP_N} faculty to meet"
+Q_TOPSET = f"Select up to {TOP_N} faculty you would be interested in meeting"
 Q_INTERESTS = "Select your areas of interest"
 RANK_LABELS = ["1st", "2nd", "3rd"] + [f"{i}th" for i in range(4, TOP_N + 1)]
 
@@ -53,7 +54,11 @@ def build_spec(roster_path: str) -> dict:
             "options": faculty_names,
             "required": True,
             "limit": TOP_N,
-            "help": f"Pick exactly {TOP_N}. You will order them on the next questions.",
+            "help": (
+                f"Pick up to {TOP_N}. The scheduler uses these as ranked preferences, "
+                "but each student's max meetings requested controls how many meetings "
+                "can be assigned."
+            ),
         },
     ]
 
@@ -63,8 +68,12 @@ def build_spec(roster_path: str) -> dict:
                 "type": "dropdown",
                 "title": _rank_title(i),
                 "options": faculty_names,
-                "required": True,
-                "help": "Must be one of the faculty you selected above.",
+                "required": i <= REQUIRED_RANKS,
+                "help": (
+                    "Required for your top 3 choices."
+                    if i <= REQUIRED_RANKS
+                    else "Optional backup choice. Leave blank if you do not have another preference."
+                ),
             }
         )
 
@@ -82,9 +91,11 @@ def build_spec(roster_path: str) -> dict:
         "title": "IEOR Visit Day - Faculty Meeting Preferences",
         "description": (
             "Tell us which faculty you would most like to meet during your visit. "
-            f"Select your top {TOP_N}, order them, and pick your research interests."
+            f"Select up to {TOP_N}, rank at least your top {REQUIRED_RANKS}, "
+            "and pick your research interests."
         ),
         "top_n": TOP_N,
+        "required_ranks": REQUIRED_RANKS,
         "faculty": roster[["faculty_id", "name"]].to_dict("records"),
         "interest_areas": CANONICAL_AREAS,
         "questions": questions,
