@@ -29,8 +29,9 @@ the day hours or remove blocks.
 
 Open **Prospective students**.
 
-Enter student names and emails directly in the table. Add rows as needed. This is
-the recommended workflow for a typical cohort of roughly 40 students.
+Enter student names, emails, and max meetings requested directly in the table.
+Add rows as needed. This is the recommended workflow for a typical cohort of
+roughly 40 students. Max meetings requested defaults to 4.
 
 If you already have a file, use the optional CSV import section. The CSV can use:
 
@@ -120,6 +121,16 @@ After solving, review:
 
 These diagnostics help explain bottlenecks such as popular faculty with limited
 availability or students with too few ranked preferences.
+
+Important metric definitions:
+
+- Raw satisfaction measures total assigned preference value.
+- Normalized satisfaction measures how well a student's own preference list was
+  fulfilled, adjusted for the student's effective max meetings.
+- Meeting fulfillment rate measures whether the student received the number of
+  meetings requested.
+- Top-1 / top-2 hit rates show whether students received their highest-priority
+  faculty, not just more meetings overall.
 
 ### 6. Make manual adjustments
 

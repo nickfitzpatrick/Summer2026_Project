@@ -2,13 +2,17 @@
 
 import pandas as pd
 
+from config import DEFAULT
+from student_metrics import student_satisfaction_table
 
-def build_diagnostics(assignments, faculty, availability, preferences, grid):
+
+def build_diagnostics(assignments, faculty, availability, preferences, grid, students=None, cfg=DEFAULT):
     faculty_capacity = _faculty_capacity(faculty, availability, assignments)
-    student_outcomes = _student_outcomes(assignments, preferences)
+    student_outcomes = _student_outcomes(assignments, preferences, grid, students, cfg)
     demand = _faculty_demand(faculty, preferences, assignments)
     summary = _summary(assignments, availability, preferences, student_outcomes)
     unassigned = _unassigned_preferences(assignments, preferences, faculty)
+    pref_comparison = _preference_length_comparison(student_outcomes, cfg)
 
     warnings = []
     low = student_outcomes[student_outcomes["top3_met"] == 0]
@@ -22,12 +26,13 @@ def build_diagnostics(assignments, faculty, availability, preferences, grid):
     ]
     if not unused.empty:
         warnings.append(f"{len(unused)} available faculty have no scheduled meetings.")
-    notes = _staff_notes(faculty_capacity, student_outcomes, demand, unassigned)
+    notes = _staff_notes(faculty_capacity, student_outcomes, demand, unassigned, cfg)
 
     return {
         "summary": summary,
         "faculty_capacity": faculty_capacity,
         "student_outcomes": student_outcomes,
+        "preference_length_comparison": pref_comparison,
         "faculty_demand": demand,
         "unassigned_preferences": unassigned,
         "warnings": warnings,
@@ -35,7 +40,7 @@ def build_diagnostics(assignments, faculty, availability, preferences, grid):
     }
 
 
-def _staff_notes(faculty_capacity, student_outcomes, demand, unassigned):
+def _staff_notes(faculty_capacity, student_outcomes, demand, unassigned, cfg):
     notes = []
 
     no_rankings = demand[demand["total_rankings"] == 0]
@@ -72,6 +77,19 @@ def _staff_notes(faculty_capacity, student_outcomes, demand, unassigned):
             "detail": f"{_names(no_availability)}. Ask for availability or remove them before the final run.",
         })
 
+    short_prefs = student_outcomes[
+        student_outcomes["ranked_faculty"] < cfg.minimum_ranked_faculty_threshold
+    ]
+    if not short_prefs.empty:
+        notes.append({
+            "level": "Review",
+            "title": f"{len(short_prefs)} student(s) ranked fewer than {cfg.minimum_ranked_faculty_threshold} faculty",
+            "detail": (
+                "Scheduling flexibility is limited for: "
+                + ", ".join(short_prefs["student_id"].astype(str).head(8).tolist())
+            ),
+        })
+
     bottlenecks = demand[
         (demand["top3_rankings"] >= 3) & (demand["unmet_rankings"] > demand["scheduled_meetings"])
     ].head(5)
@@ -86,7 +104,7 @@ def _staff_notes(faculty_capacity, student_outcomes, demand, unassigned):
         })
 
     low_students = student_outcomes[
-        (student_outcomes["meetings"] == 0) | (student_outcomes["top3_met"] == 0)
+        (student_outcomes["assigned_meetings"] == 0) | (student_outcomes["top3_met"] == 0)
     ].head(8)
     if not low_students.empty:
         notes.append({
@@ -96,6 +114,35 @@ def _staff_notes(faculty_capacity, student_outcomes, demand, unassigned):
                 "These students received no meetings or no top-3 meetings: "
                 + ", ".join(low_students["student_id"].astype(str).tolist())
                 + ". Consider manual adjustment or collecting more preferences."
+            ),
+        })
+
+    low_normalized = student_outcomes[
+        (student_outcomes["effective_max_meetings"] > 0)
+        & (student_outcomes["normalized_satisfaction"] < 0.5)
+    ].head(8)
+    if not low_normalized.empty:
+        notes.append({
+            "level": "Review",
+            "title": f"{len(low_normalized)} student(s) have low normalized satisfaction",
+            "detail": (
+                "These students received less than half of their own maximum possible "
+                "preference value: "
+                + ", ".join(low_normalized["student_id"].astype(str).tolist())
+            ),
+        })
+
+    low_fulfillment = student_outcomes[
+        (student_outcomes["effective_max_meetings"] > 0)
+        & (student_outcomes["meeting_fulfillment_rate"] < 0.75)
+    ].head(8)
+    if not low_fulfillment.empty:
+        notes.append({
+            "level": "Action",
+            "title": f"{len(low_fulfillment)} student(s) received fewer meetings than requested",
+            "detail": (
+                "Check availability or collect backup preferences for: "
+                + ", ".join(low_fulfillment["student_id"].astype(str).tolist())
             ),
         })
 
@@ -142,6 +189,10 @@ def _summary(assignments, availability, preferences, student_outcomes):
         "avg_meetings_per_student": total_meetings / n_students if n_students else 0,
         "lowest_student_meetings": int(student_outcomes["meetings"].min()) if not student_outcomes.empty else 0,
         "avg_rank_value": float(student_outcomes["avg_rank"].mean()) if not student_outcomes.empty else 0,
+        "avg_normalized_satisfaction": float(student_outcomes["normalized_satisfaction"].mean()) if not student_outcomes.empty else 0,
+        "avg_meeting_fulfillment_rate": float(student_outcomes["meeting_fulfillment_rate"].mean()) if not student_outcomes.empty else 0,
+        "top_1_hit_rate": float(student_outcomes["got_rank_1"].mean()) if not student_outcomes.empty else 0,
+        "top_2_hit_rate": float(student_outcomes["got_rank_2"].mean()) if not student_outcomes.empty else 0,
     }
 
 
@@ -159,22 +210,27 @@ def _faculty_capacity(faculty, availability, assignments):
     return out.sort_values(["scheduled_meetings", "available_slots"], ascending=False)
 
 
-def _student_outcomes(assignments, preferences):
-    students = pd.Index(preferences["student_id"].unique(), name="student_id")
-    got = assignments.merge(preferences, on=["student_id", "faculty_id"], how="left")
-    meetings = assignments.groupby("student_id").size().reindex(students).fillna(0).astype(int)
-    top1 = got[got["rank"] == 1].groupby("student_id").size().reindex(students).fillna(0).astype(int)
-    top3 = got[got["rank"] <= 3].groupby("student_id").size().reindex(students).fillna(0).astype(int)
-    avg_rank = got.groupby("student_id")["rank"].mean().reindex(students)
-    prefs_count = preferences.groupby("student_id")["faculty_id"].nunique().reindex(students).fillna(0).astype(int)
-    return pd.DataFrame({
-        "student_id": students,
-        "ranked_faculty": prefs_count.values,
-        "meetings": meetings.values,
-        "top1_met": top1.values,
-        "top3_met": top3.values,
-        "avg_rank": avg_rank.fillna(0).round(2).values,
-    }).sort_values(["meetings", "top3_met", "avg_rank"], ascending=[True, True, True])
+def _student_outcomes(assignments, preferences, grid, students=None, cfg=DEFAULT):
+    out = student_satisfaction_table(assignments, preferences, grid, students, cfg)
+    student_ids = pd.Index(preferences["student_id"].astype(str).unique(), name="student_id")
+    got = assignments.copy()
+    if got.empty:
+        got = pd.DataFrame(columns=["student_id", "faculty_id", "slot_id"])
+    got["student_id"] = got["student_id"].astype(str)
+    prefs = preferences.copy()
+    prefs["student_id"] = prefs["student_id"].astype(str)
+    got = got.merge(prefs, on=["student_id", "faculty_id"], how="left")
+    top1 = got[got["rank"] == 1].groupby("student_id").size().reindex(student_ids).fillna(0).astype(int)
+    top3 = got[got["rank"] <= 3].groupby("student_id").size().reindex(student_ids).fillna(0).astype(int)
+    avg_rank = got.groupby("student_id")["rank"].mean().reindex(student_ids)
+    out["meetings"] = out["assigned_meetings"]
+    out["top1_met"] = out["student_id"].map(top1).fillna(0).astype(int)
+    out["top3_met"] = out["student_id"].map(top3).fillna(0).astype(int)
+    out["avg_rank"] = out["student_id"].map(avg_rank).fillna(0).round(2)
+    return out.sort_values(
+        ["normalized_satisfaction", "meeting_fulfillment_rate", "top3_met"],
+        ascending=[True, True, True],
+    )
 
 
 def _faculty_demand(faculty, preferences, assignments):
@@ -187,6 +243,33 @@ def _faculty_demand(faculty, preferences, assignments):
     out["scheduled_meetings"] = out["faculty_id"].map(used).fillna(0).astype(int)
     out["unmet_rankings"] = out["total_rankings"] - out["scheduled_meetings"]
     return out.sort_values(["total_rankings", "top3_rankings"], ascending=False)
+
+
+def _preference_length_comparison(student_outcomes, cfg):
+    if student_outcomes.empty:
+        return pd.DataFrame(columns=[
+            "group", "students", "avg_ranked_faculty", "avg_raw_satisfaction",
+            "avg_normalized_satisfaction", "avg_meeting_fulfillment_rate",
+        ])
+    threshold = cfg.default_max_meetings_requested
+    rows = []
+    groups = [
+        ("Short preference lists", student_outcomes["ranked_faculty"] < threshold),
+        ("Longer preference lists", student_outcomes["ranked_faculty"] >= threshold),
+    ]
+    for label, mask in groups:
+        g = student_outcomes[mask]
+        if g.empty:
+            continue
+        rows.append({
+            "group": label,
+            "students": len(g),
+            "avg_ranked_faculty": round(float(g["ranked_faculty"].mean()), 2),
+            "avg_raw_satisfaction": round(float(g["raw_satisfaction"].mean()), 2),
+            "avg_normalized_satisfaction": round(float(g["normalized_satisfaction"].mean()), 3),
+            "avg_meeting_fulfillment_rate": round(float(g["meeting_fulfillment_rate"].mean()), 3),
+        })
+    return pd.DataFrame(rows)
 
 
 def _unassigned_preferences(assignments, preferences, faculty):

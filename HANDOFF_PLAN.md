@@ -10,6 +10,8 @@ Development for launch readiness is on `v1-launch-ready`. Do not merge into
 - Staff-facing Streamlit workflow for visit-day setup, intake previews,
   scheduling, diagnostics, manual review, and exports.
 - Scheduler input validation with blocking errors and reviewable warnings.
+- Student-level max meeting requests, defaulting to 4, with normalized
+  satisfaction and meeting fulfillment diagnostics.
 - Dry-run-only send workflow with recipient, subject, body preview, confirmation,
   and downloadable send log.
 - Semi-automated CSV fallback for Google Form responses:

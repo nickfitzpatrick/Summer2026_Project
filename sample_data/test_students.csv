@@ -1,6 +1,6 @@
-name,email
-Maya Patel,maya.patel@example.edu
-Liam Nguyen,liam.nguyen@example.edu
-Sofia Garcia,sofia.garcia@example.edu
-Noah Kim,noah.kim@example.edu
-Aisha Hassan,aisha.hassan@example.edu
+name,email,max_meetings_requested
+Maya Patel,maya.patel@example.edu,4
+Liam Nguyen,liam.nguyen@example.edu,4
+Sofia Garcia,sofia.garcia@example.edu,3
+Noah Kim,noah.kim@example.edu,4
+Aisha Hassan,aisha.hassan@example.edu,2

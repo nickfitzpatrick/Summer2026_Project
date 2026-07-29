@@ -42,3 +42,23 @@ def test_validation_accepts_minimal_clean_case():
 
     assert report.ok
     assert report.info
+
+
+def test_validation_rejects_student_request_above_available_slots():
+    faculty = pd.DataFrame([{"faculty_id": "F01", "name": "Prof A"}])
+    availability = pd.DataFrame([{"faculty_id": "F01", "slot_id": "D1-S1"}])
+    preferences = pd.DataFrame([{"student_id": "S01", "faculty_id": "F01", "rank": 1}])
+    students = pd.DataFrame([{"student_id": "S01", "max_meetings_requested": 99}])
+    grid = pd.DataFrame([{
+        "slot_id": "D1-S1",
+        "day": 1,
+        "start_time": "09:00",
+        "end_time": "09:20",
+    }])
+
+    report = validate_solver_inputs(
+        faculty, availability, preferences, grid, min_preferences=1, students=students
+    )
+
+    assert not report.ok
+    assert any("max_meetings_requested is greater" in e for e in report.errors)

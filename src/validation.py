@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from config import DEFAULT
+from student_metrics import MAX_COL
+
 
 @dataclass
 class ValidationReport:
@@ -21,8 +24,10 @@ class ValidationReport:
         return not self.errors
 
 
-def validate_solver_inputs(faculty, availability, preferences, grid, min_preferences=3):
+def validate_solver_inputs(faculty, availability, preferences, grid, min_preferences=None, students=None, cfg=DEFAULT):
     report = ValidationReport()
+    if min_preferences is None:
+        min_preferences = cfg.minimum_ranked_faculty_threshold
 
     if faculty is None or availability is None or preferences is None:
         report.errors.append("Load faculty, availability, and preference files before scheduling.")
@@ -104,8 +109,10 @@ def validate_solver_inputs(faculty, availability, preferences, grid, min_prefere
     if not low_pref.empty:
         report.warnings.append(
             f"{len(low_pref)} student(s) have fewer than {min_preferences} ranked faculty. "
-            "They may receive fewer or lower-priority meetings."
+            "Scheduling flexibility is limited."
         )
+
+    _validate_student_requests(report, students, preferences, grid, cfg)
 
     unavailable_pref_faculty = sorted(pref_faculty - avail_faculty)
     if unavailable_pref_faculty:
@@ -127,6 +134,53 @@ def validate_solver_inputs(faculty, availability, preferences, grid, min_prefere
             f"{len(faculty_ids)} faculty, {len(slot_ids)} meeting slot(s)."
         )
     return report
+
+
+def _validate_student_requests(report, students, preferences, grid, cfg):
+    if students is None or MAX_COL not in getattr(students, "columns", []):
+        report.info.append(
+            f"Missing {MAX_COL}; defaulting to {cfg.default_max_meetings_requested} meeting(s) per student."
+        )
+        return
+    if "student_id" not in students.columns:
+        report.errors.append(f"students.csv must include student_id when using {MAX_COL}.")
+        return
+
+    known_students = set(preferences["student_id"].astype(str).str.strip())
+    unknown = sorted(set(students["student_id"].astype(str).str.strip()) - known_students)
+    if unknown:
+        report.warnings.append(
+            "Student request rows refer to student IDs with no preferences: "
+            + _preview(unknown)
+        )
+
+    available_slots = len(grid)
+    bad = []
+    too_large = []
+    for _, row in students.iterrows():
+        sid = str(row.get("student_id", "")).strip()
+        val = row.get(MAX_COL)
+        if pd.isna(val) or str(val).strip() == "":
+            continue
+        try:
+            parsed = int(float(val))
+        except (TypeError, ValueError):
+            bad.append(sid or "blank student_id")
+            continue
+        if parsed <= 0:
+            bad.append(sid or "blank student_id")
+        elif parsed > available_slots:
+            too_large.append(sid or "blank student_id")
+    if bad:
+        report.warnings.append(
+            f"{MAX_COL} has missing or invalid values for {len(bad)} student(s); "
+            f"the app will default those rows to {cfg.default_max_meetings_requested}."
+        )
+    if too_large:
+        report.errors.append(
+            f"{MAX_COL} is greater than the number of available visit-day slots for: "
+            + _preview(too_large)
+        )
 
 
 def _require_columns(report, df, label, required):

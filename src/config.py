@@ -28,6 +28,8 @@ class Config:
     num_faculty: int = 25             # only used when use_real_roster is False
     num_students: int = 25
     prefs_per_student: int = 8        # top-N ranked faculty per student
+    default_max_meetings_requested: int = 4
+    minimum_ranked_faculty_threshold: int = 3
     num_research_areas: int = 6       # only used when use_real_roster is False
 
     # objective weights

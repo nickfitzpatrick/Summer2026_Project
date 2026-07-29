@@ -24,6 +24,7 @@ from visit_days import Block, default_plans, build_grid_from_plans
 from validation import validate_solver_inputs
 from diagnostics import build_diagnostics
 from exports import build_export_tables, to_csv_bytes
+from student_metrics import MAX_COL
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOGO = os.path.join(HERE, "assets", "logo.png")
@@ -253,10 +254,12 @@ def spec_template_df(spec):
     return pd.DataFrame(rows)
 
 
-def clean_people_editor(df, add_faculty_ids=False):
+def clean_people_editor(df, add_faculty_ids=False, add_student_requests=False):
     """Clean direct-entry name/email rows from the Streamlit data editor."""
     if df is None or df.empty:
         cols = ["faculty_id", "name", "email"] if add_faculty_ids else ["name", "email"]
+        if add_student_requests:
+            cols.append(MAX_COL)
         return pd.DataFrame(columns=cols)
     out = df.copy()
     for col in ["name", "email"]:
@@ -270,10 +273,15 @@ def clean_people_editor(df, add_faculty_ids=False):
             out["area"] = ""
         out["area"] = out["area"].fillna("").astype(str).str.strip()
         return out[["faculty_id", "name", "area", "email"]]
+    if add_student_requests:
+        if MAX_COL not in out.columns:
+            out[MAX_COL] = 4
+        out[MAX_COL] = out[MAX_COL].apply(_clean_max_meetings)
+        return out[["name", "email", MAX_COL]]
     return out[["name", "email"]]
 
 
-def load_csv_into_editor(uploaded_file, state_key, add_faculty_ids=False):
+def load_csv_into_editor(uploaded_file, state_key, add_faculty_ids=False, add_student_requests=False):
     if uploaded_file is None:
         return
     df = pd.read_csv(uploaded_file)
@@ -290,7 +298,62 @@ def load_csv_into_editor(uploaded_file, state_key, add_faculty_ids=False):
             df["name"] = ""
         if "email" not in df.columns:
             df["email"] = ""
-        st.session_state[state_key] = df[["name", "email"]]
+        if add_student_requests:
+            if MAX_COL not in df.columns:
+                df[MAX_COL] = 4
+            st.session_state[state_key] = df[["name", "email", MAX_COL]]
+        else:
+            st.session_state[state_key] = df[["name", "email"]]
+
+
+def _clean_max_meetings(value):
+    try:
+        if pd.isna(value) or str(value).strip() == "":
+            return 4
+        parsed = int(float(value))
+        return parsed if parsed > 0 else 4
+    except (TypeError, ValueError):
+        return 4
+
+
+def student_requests_from_preferences(preferences, source_students=None):
+    students = pd.DataFrame({"student_id": preferences["student_id"].astype(str).unique()})
+    students[MAX_COL] = 4
+    if source_students is not None and not source_students.empty and MAX_COL in source_students.columns:
+        source = source_students.reset_index(drop=True)
+        for i in range(min(len(students), len(source))):
+            students.loc[i, MAX_COL] = _clean_max_meetings(source.loc[i, MAX_COL])
+    return students
+
+
+def student_requests_from_responses(preferences, responses, source_students=None):
+    students = pd.DataFrame({"student_id": preferences["student_id"].astype(str).unique()})
+    students[MAX_COL] = 4
+    if source_students is None or source_students.empty or MAX_COL not in source_students.columns:
+        return students
+
+    email_col = _find_col(source_students, "email")
+    response_email_col = _find_col(responses, "email")
+    if not email_col or not response_email_col:
+        return student_requests_from_preferences(preferences, source_students)
+
+    source_by_email = {
+        str(row[email_col]).strip().lower(): _clean_max_meetings(row[MAX_COL])
+        for _, row in source_students.iterrows()
+        if str(row.get(email_col, "")).strip()
+    }
+    for i, row in responses.reset_index(drop=True).iterrows():
+        if i >= len(students):
+            break
+        email = str(row.get(response_email_col, "")).strip().lower()
+        if email in source_by_email:
+            students.loc[i, MAX_COL] = source_by_email[email]
+    return students
+
+
+def _find_col(df, target):
+    cols = {c.lower().strip(): c for c in df.columns}
+    return cols.get(target)
 
 
 def schedule_view(assignments, faculty, grid):
@@ -618,12 +681,14 @@ def render_student_intake():
     step(1, "Enter prospective students")
     st.caption(
         "Type student names and emails directly. Add rows as needed. CSV upload is "
-        "still available below if you already have a file."
+        "still available below if you already have a file. Max meetings requested "
+        "defaults to 4 so the model does not assume ranking more faculty means a "
+        "student wants unlimited meetings."
     )
 
     if "student_people_editor" not in st.session_state:
         st.session_state["student_people_editor"] = pd.DataFrame(
-            [{"name": "", "email": ""} for _ in range(8)]
+            [{"name": "", "email": "", MAX_COL: 4} for _ in range(8)]
         )
     edited_students = st.data_editor(
         st.session_state["student_people_editor"],
@@ -634,6 +699,12 @@ def render_student_intake():
         column_config={
             "name": st.column_config.TextColumn("Student name"),
             "email": st.column_config.TextColumn("Email"),
+            MAX_COL: st.column_config.NumberColumn(
+                "Max meetings requested",
+                min_value=1,
+                step=1,
+                help="Defaults to 4. This limits how many faculty meetings the scheduler tries to assign.",
+            ),
         },
     )
     st.session_state["student_people_editor"] = edited_students
@@ -642,12 +713,12 @@ def render_student_intake():
         sample_download("test_students.csv", "Download sample student CSV")
         stu_file = st.file_uploader("Student list (CSV)", type="csv", key="intake_csv")
         if stu_file is not None:
-            load_csv_into_editor(stu_file, "student_people_editor")
+            load_csv_into_editor(stu_file, "student_people_editor", add_student_requests=True)
             st.session_state.pop("student_people_editor_widget", None)
             st.success("CSV loaded into the editable table above.")
             st.rerun()
 
-    recipients = clean_people_editor(st.session_state["student_people_editor"])
+    recipients = clean_people_editor(st.session_state["student_people_editor"], add_student_requests=True)
     st.session_state["recipients"] = recipients
     st.session_state["recipients_source"] = "direct entry table"
 
@@ -696,6 +767,7 @@ def render_student_intake():
         prefs, interests, warnings = adapt(responses, ROSTER_XLSX)
         st.session_state["parsed_preferences"] = prefs
         st.session_state["parsed_student_interests"] = interests
+        st.session_state["parsed_students"] = student_requests_from_responses(prefs, responses, recipients)
         notice(f"Parsed {len(prefs)} preference rows for {prefs['student_id'].nunique()} students.")
         if warnings:
             with st.expander(f"{len(warnings)} student response warning(s)", expanded=True):
@@ -951,7 +1023,7 @@ def render_matching():
         horizontal=True,
     )
 
-    faculty = availability = preferences = None
+    faculty = availability = preferences = students = None
     cfg = make_config()
     grid = get_grid()
 
@@ -959,6 +1031,7 @@ def render_matching():
         demo_cfg = make_config()
         demo_cfg.num_students = 25
         faculty, availability, preferences, _ = generate(demo_cfg)
+        students = student_requests_from_preferences(preferences)
         # use the staff-defined grid, regenerating availability against it
         availability = _availability_on_grid(faculty, grid)
         cfg = demo_cfg
@@ -976,30 +1049,41 @@ def render_matching():
                     faculty = faculty.assign(area="")
                 availability = st.session_state["parsed_availability"]
                 preferences = st.session_state["parsed_preferences"]
+                students = st.session_state.get("parsed_students")
+                if students is None:
+                    students = student_requests_from_preferences(preferences)
                 notice("Parsed response data loaded and ready to schedule.")
         st.caption(
-            "Upload three files. faculty.csv (faculty_id, name, area), "
-            "availability.csv (faculty_id, slot_id), preferences.csv (student_id, faculty_id, rank)."
+            "Upload faculty.csv, availability.csv, and preferences.csv. Optional students.csv "
+            "can include student_id and max_meetings_requested."
         )
         with st.expander("Download sample scheduler CSVs", expanded=False):
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             with c1:
                 sample_download("test_faculty.csv", "faculty.csv sample")
             with c2:
                 sample_download("test_availability.csv", "availability.csv sample")
             with c3:
                 sample_download("test_preferences.csv", "preferences.csv sample")
+            with c4:
+                sample_download("test_student_requests.csv", "students.csv sample")
         fac_f = st.file_uploader("faculty.csv", type="csv")
         avail_f = st.file_uploader("availability.csv", type="csv")
         pref_f = st.file_uploader("preferences.csv", type="csv")
+        students_f = st.file_uploader("students.csv (optional)", type="csv")
         if fac_f and avail_f and pref_f:
             faculty = pd.read_csv(fac_f)
             availability = pd.read_csv(avail_f)
             preferences = pd.read_csv(pref_f)
+            students = pd.read_csv(students_f) if students_f else student_requests_from_preferences(preferences)
             notice("Collected data loaded and ready to schedule.")
 
     rule()
     step(2, "Build the schedule")
+    st.caption(
+        "The optimizer respects each student's effective max meetings: the smaller of "
+        "their requested max, their number of ranked faculty, and the number of available slots."
+    )
     with st.expander("Advanced settings"):
         st.session_state["time_limit"] = st.slider(
             "Solver time limit (seconds)", 5, 120, st.session_state["time_limit"],
@@ -1008,7 +1092,7 @@ def render_matching():
 
     validation = None
     if faculty is not None:
-        validation = validate_solver_inputs(faculty, availability, preferences, grid)
+        validation = validate_solver_inputs(faculty, availability, preferences, grid, students=students, cfg=cfg)
         if validation.info:
             for msg in validation.info:
                 st.success(msg)
@@ -1024,7 +1108,7 @@ def render_matching():
     can_solve = validation.ok if validation is not None else False
     if faculty is not None and st.button("Match students to faculty", type="primary", disabled=not can_solve):
         with st.spinner("Optimizing schedule..."):
-            assignments, status, obj = solve(faculty, availability, preferences, grid, cfg)
+            assignments, status, obj = solve(faculty, availability, preferences, grid, cfg, student_requests=students)
 
         if assignments.empty:
             st.error(f"No feasible schedule found (solver status: {status}). Check availability data.")
@@ -1034,6 +1118,7 @@ def render_matching():
                 "assignments": assignments,
                 "faculty": faculty,
                 "preferences": preferences,
+                "students": students,
                 "grid": grid,
                 "availability": availability,
                 "status": status,
@@ -1045,16 +1130,17 @@ def render_matching():
         sched = render_schedules(r["assignments"], r["faculty"], r["grid"])
         mx = compute_metrics(r["assignments"], r["preferences"])
         dx = build_diagnostics(
-            r["assignments"], r["faculty"], r["availability"], r["preferences"], r["grid"]
+            r["assignments"], r["faculty"], r["availability"], r["preferences"], r["grid"],
+            students=r.get("students"), cfg=cfg
         )
-        exports = build_export_tables(sched)
+        exports = build_export_tables(sched, dx["student_outcomes"])
 
         step(3, "Results")
         cards = [
             ("navy", "Total meetings", str(mx["total_meetings"])),
-            ("gold", "Got their #1 choice", f"{mx['top1_met']}/{mx['n_students']}"),
-            ("navy", "Avg top-3 met", f"{mx['top3_avg']:.2f}/3"),
-            ("gold", "Worst-off top-3", f"{mx['top3_worst']}/3"),
+            ("gold", "Avg normalized satisfaction", f"{dx['summary']['avg_normalized_satisfaction']:.0%}"),
+            ("navy", "Meeting fulfillment", f"{dx['summary']['avg_meeting_fulfillment_rate']:.0%}"),
+            ("gold", "Top-1 hit rate", f"{dx['summary']['top_1_hit_rate']:.0%}"),
         ]
         html = '<div class="cardrow">' + "".join(
             f'<div class="card {c}"><div class="label">{lab}</div>'
@@ -1073,7 +1159,7 @@ def render_matching():
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Capacity used", f"{dsum['utilization_rate']:.0%}")
         c2.metric("Available slots", f"{dsum['total_capacity']}")
-        c3.metric("Avg meetings/student", f"{dsum['avg_meetings_per_student']:.1f}")
+        c3.metric("Top-2 hit rate", f"{dsum['top_2_hit_rate']:.0%}")
         c4.metric("Lowest meetings", f"{dsum['lowest_student_meetings']}")
 
         view_stu, view_fac, view_manual, view_diag, view_exports = st.tabs([
@@ -1095,6 +1181,12 @@ def render_matching():
             with st.expander("Open manual adjustment tools", expanded=False):
                 render_manual_review(r)
         with view_diag:
+            st.caption(
+                "Raw satisfaction is total assigned preference value. Normalized satisfaction "
+                "compares that value to the best possible value from the student's own preference "
+                "list and effective max meetings. Meeting fulfillment shows whether the student "
+                "received the number of meetings requested."
+            )
             st.markdown("**Things to review**")
             for note in dx.get("notes", []):
                 if note["level"] == "Action":
@@ -1109,6 +1201,8 @@ def render_matching():
                 st.dataframe(dx["faculty_capacity"], hide_index=True, use_container_width=True)
             with st.expander("Student outcomes", expanded=False):
                 st.dataframe(dx["student_outcomes"], hide_index=True, use_container_width=True)
+            with st.expander("Short vs long preference-list comparison", expanded=False):
+                st.dataframe(dx["preference_length_comparison"], hide_index=True, use_container_width=True)
             with st.expander("Faculty demand and bottlenecks", expanded=False):
                 st.dataframe(dx["faculty_demand"], hide_index=True, use_container_width=True)
             with st.expander("Unassigned preferences", expanded=False):
@@ -1143,6 +1237,12 @@ def render_matching():
                 "Download faculty email text CSV",
                 to_csv_bytes(exports["faculty_email_text"]),
                 "faculty_email_text.csv",
+                "text/csv",
+            )
+            st.download_button(
+                "Download student diagnostics CSV",
+                to_csv_bytes(exports["student_diagnostics"]),
+                "student_diagnostics.csv",
                 "text/csv",
             )
 

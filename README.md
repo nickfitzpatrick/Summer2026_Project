@@ -13,7 +13,8 @@ the final schedules.
 1. Build visit days: set meeting length, buffer time, day hours, and blocked
    events such as lunch or tours.
 2. Enter prospective student names/emails directly, or import an optional CSV,
-   then preview the student preference form.
+   set each student's max meetings requested, then preview the student
+   preference form.
 3. Download form templates or upload exported student response CSVs.
 4. Enter faculty names/emails directly, preview the faculty availability form,
    and upload exported faculty response CSVs.
@@ -88,6 +89,18 @@ S01,F03,2
 Required columns: `student_id`, `faculty_id`, `rank`. Ranks must be positive
 whole numbers.
 
+`students.csv` (optional)
+
+```csv
+student_id,max_meetings_requested
+S01,4
+S02,3
+```
+
+If omitted, `max_meetings_requested` defaults to 4. The effective maximum used by
+the optimizer is the smaller of the requested maximum, the number of ranked
+faculty for that student, and the number of available visit-day slots.
+
 ## Validation
 
 Before solving, the app checks:
@@ -102,6 +115,7 @@ Before solving, the app checks:
 - empty preference or availability files
 - faculty with zero availability
 - students with too few preferences
+- unreasonable max meeting requests
 
 Errors block scheduling. Warnings allow scheduling but should be reviewed.
 
@@ -117,7 +131,14 @@ After a successful solve, the app shows:
 - faculty capacity used vs available
 - faculty popularity and unmet demand
 - student outcomes and low-satisfaction cases
+- raw satisfaction, normalized satisfaction, and meeting fulfillment rate
+- top-1 and top-2 hit rates
 - unassigned preferences
+
+Raw satisfaction is the total assigned preference value. Normalized satisfaction
+compares that value with the best possible value from the student's own submitted
+preference list and effective max meetings. Meeting fulfillment rate measures
+whether the student received the number of meetings requested.
 
 Downloadable files:
 
@@ -127,6 +148,7 @@ Downloadable files:
 - `student_email_text.csv`
 - `faculty_email_text.csv`
 - `send_log.csv`
+- `student_diagnostics.csv`
 
 Staff should download these files after each final run because Streamlit session
 state is not a permanent system of record.

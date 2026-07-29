@@ -22,9 +22,10 @@ import pandas as pd
 from ortools.sat.python import cp_model
 
 from config import Config, DEFAULT
+from student_metrics import student_request_table
 
 
-def solve(faculty, availability, preferences, grid, cfg: Config = DEFAULT):
+def solve(faculty, availability, preferences, grid, cfg: Config = DEFAULT, student_requests=None):
     slots = grid["slot_id"].tolist()
     avail = defaultdict(set)
     for _, r in availability.iterrows():
@@ -63,6 +64,16 @@ def solve(faculty, availability, preferences, grid, cfg: Config = DEFAULT):
         m.AddAtMostOne(vs)
     for vs in pair_vars.values():
         m.AddAtMostOne(vs)   # a pair meets at most once
+
+    requests = student_request_table(preferences, grid, student_requests, cfg)
+    effective_max = dict(zip(requests["student_id"], requests["effective_max_meetings"]))
+    for sid in students:
+        vars_for_student = [
+            var for (s2, fid, t), var in x.items()
+            if s2 == sid
+        ]
+        if vars_for_student:
+            m.Add(sum(vars_for_student) <= effective_max.get(str(sid), cfg.default_max_meetings_requested))
 
     # total preference value captured across all meetings
     pref_term = sum(pref_val[(sid, fid)] * var for (sid, fid, t), var in x.items())
