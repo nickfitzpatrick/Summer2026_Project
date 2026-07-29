@@ -49,6 +49,19 @@ def _configured_password():
         return os.environ.get("APP_PASSWORD", "")
 
 
+def _secret_value(name, default=""):
+    value = os.environ.get(name, default)
+    try:
+        return st.secrets.get(name, value)
+    except Exception:
+        return value
+
+
+def _secret_bool(name, default=False):
+    raw = str(_secret_value(name, str(default))).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def require_login():
     password = _configured_password()
     if not password:
@@ -673,7 +686,7 @@ with tabs[1]:
 # TAB 3 - CONTACT PROSPECTIVE STUDENTS (preference form)
 # =====================================================================
 def render_student_intake():
-    from google_intake import send_intake
+    from google_intake import send_intake, live_config_status
     from form_spec import build_spec
     from adapter import adapt
     import send_log
@@ -791,7 +804,7 @@ def render_student_intake():
             key="student_interests_download",
         )
 
-    with st.expander("Optional: preview dry-run email", expanded=False):
+    with st.expander("Optional: preview and send email", expanded=False):
         last = send_log.last_send()
         if last:
             tag = " (simulated)" if last.get("simulated") else ""
@@ -799,7 +812,6 @@ def render_student_intake():
                 f"Last sent {send_log.pretty_time(last['timestamp'])} to "
                 f"{last['n_recipients']} students{tag}."
             )
-        st.warning("Live email sending is disabled in this build. This only records a dry run.")
         subject = st.text_input(
             "Email subject line",
             value=st.session_state.get("subject", DEFAULT_SUBJECT),
@@ -828,6 +840,55 @@ def render_student_intake():
                 f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
                 f"for {entry['n_recipients']} students. No email was sent."
             )
+
+        live_enabled = _secret_bool("ENABLE_LIVE_EMAIL_SENDING")
+        google_ready, google_missing = live_config_status()
+        if not live_enabled:
+            st.info("Live email sending is locked. Set ENABLE_LIVE_EMAIL_SENDING=true in Streamlit Secrets after testing.")
+        elif not google_ready:
+            st.warning("Live email sending is enabled, but Google credentials are missing.")
+            for msg in google_missing:
+                st.caption(msg)
+        else:
+            st.markdown("**Live send**")
+            st.warning("This will create a real Google Form and email every listed student.")
+            live_reviewed = st.checkbox(
+                "I completed a dry run and reviewed the recipient list, subject, and body.",
+                key="student_live_reviewed",
+            )
+            live_phrase = st.text_input("Type SEND LIVE to enable the live send button", key="student_live_phrase")
+            can_live_send = result.ok and live_reviewed and live_phrase.strip() == "SEND LIVE"
+            if st.button("Create form and send student emails", type="primary", disabled=not can_live_send):
+                live_result = send_intake(
+                    recipients,
+                    roster_path=ROSTER_XLSX,
+                    dry_run=False,
+                    subject=subject,
+                    body=body,
+                    sender=_secret_value("GOOGLE_SENDER_EMAIL"),
+                )
+                if live_result.ok:
+                    entry = send_log.record_send(
+                        live_result.n_recipients,
+                        subject,
+                        form_url=live_result.form_url,
+                        sheet_url=live_result.sheet_url,
+                        simulated=False,
+                        key="student",
+                        body=body,
+                        dry_run=False,
+                        status="live_sent",
+                    )
+                    st.success(
+                        f"Live send recorded on {send_log.pretty_time(entry['timestamp'])} "
+                        f"for {entry['n_recipients']} students."
+                    )
+                    st.link_button("Open student Google Form", live_result.form_url)
+                    st.info("Open the form Responses tab and link responses to a Google Sheet before collecting data.")
+                else:
+                    st.error("Live student send failed.")
+                    for err in live_result.errors:
+                        st.warning(err)
         send_log_download(send_log, key="student_send_log_download")
 
 
@@ -839,7 +900,7 @@ with tabs[2]:
 # TAB 4 - CONTACT FACULTY AVAILABILITY (availability form)
 # =====================================================================
 def render_faculty_intake():
-    from google_intake import send_intake
+    from google_intake import send_intake, live_config_status
     from faculty_form_spec import build_faculty_spec
     from faculty_adapter import adapt_faculty_availability
     import send_log
@@ -951,7 +1012,7 @@ def render_faculty_intake():
             key="faculty_availability_download",
         )
 
-    with st.expander("Optional: preview dry-run email", expanded=False):
+    with st.expander("Optional: preview and send email", expanded=False):
         last = send_log.last_send(key="faculty")
         if last:
             tag = " (simulated)" if last.get("simulated") else ""
@@ -959,7 +1020,6 @@ def render_faculty_intake():
                 f"Last sent {send_log.pretty_time(last['timestamp'])} to "
                 f"{last['n_recipients']} faculty{tag}."
             )
-        st.warning("Live email sending is disabled in this build. This only records a dry run.")
         subject = st.text_input(
             "Email subject line",
             value=st.session_state.get("fac_subject", DEFAULT_SUBJECT),
@@ -988,6 +1048,55 @@ def render_faculty_intake():
                 f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
                 f"for {entry['n_recipients']} faculty. No email was sent."
             )
+
+        live_enabled = _secret_bool("ENABLE_LIVE_EMAIL_SENDING")
+        google_ready, google_missing = live_config_status()
+        if not live_enabled:
+            st.info("Live email sending is locked. Set ENABLE_LIVE_EMAIL_SENDING=true in Streamlit Secrets after testing.")
+        elif not google_ready:
+            st.warning("Live email sending is enabled, but Google credentials are missing.")
+            for msg in google_missing:
+                st.caption(msg)
+        else:
+            st.markdown("**Live send**")
+            st.warning("This will create a real Google Form and email every listed faculty member.")
+            live_reviewed = st.checkbox(
+                "I completed a dry run and reviewed the recipient list, subject, and body.",
+                key="faculty_live_reviewed",
+            )
+            live_phrase = st.text_input("Type SEND LIVE to enable the live send button", key="faculty_live_phrase")
+            can_live_send = result.ok and live_reviewed and live_phrase.strip() == "SEND LIVE"
+            if st.button("Create form and send faculty emails", type="primary", disabled=not can_live_send):
+                live_result = send_intake(
+                    recipients,
+                    spec=spec,
+                    dry_run=False,
+                    subject=subject,
+                    body=body,
+                    sender=_secret_value("GOOGLE_SENDER_EMAIL"),
+                )
+                if live_result.ok:
+                    entry = send_log.record_send(
+                        live_result.n_recipients,
+                        subject,
+                        form_url=live_result.form_url,
+                        sheet_url=live_result.sheet_url,
+                        simulated=False,
+                        key="faculty",
+                        body=body,
+                        dry_run=False,
+                        status="live_sent",
+                    )
+                    st.success(
+                        f"Live send recorded on {send_log.pretty_time(entry['timestamp'])} "
+                        f"for {entry['n_recipients']} faculty."
+                    )
+                    st.link_button("Open faculty Google Form", live_result.form_url)
+                    st.info("Open the form Responses tab and link responses to a Google Sheet before collecting data.")
+                else:
+                    st.error("Live faculty send failed.")
+                    for err in live_result.errors:
+                        st.warning(err)
         send_log_download(send_log, key="faculty_send_log_download")
 
     with st.expander("Optional: view imported faculty availability", expanded=False):

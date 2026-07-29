@@ -1,102 +1,125 @@
 # Google setup for form and email integration
 
-The app currently supports preview and dry-run workflows only. It validates
-recipient lists, previews form content, previews email subjects and bodies, and
-records dry-run send logs. It does not send real email or create live Google
-Forms automatically yet.
+The app supports two intake modes:
 
-This document describes what a developer must configure before a future guarded
-live path can be enabled. Non-technical staff should not handle credentials.
+- Dry run: validate recipients, preview the form/email, and record a send log.
+- Live send: create a Google Form from the generated spec and email the form URL
+  to every reviewed recipient through Gmail.
 
-## What gets wired
+Live sending is locked unless `ENABLE_LIVE_EMAIL_SENDING=true` is set in
+Streamlit Secrets or the local environment. Staff must still review the
+recipient list and type `SEND LIVE` in the app before any real email is sent.
 
-The app needs to do three things on the staff member's behalf:
+## What is automated
 
-1. Create a Google Form from the generated spec (`src/form_spec.py`).
-2. Link a Google Sheet to collect responses.
-3. Email each student the form link (Gmail).
+1. Create the student preference or faculty availability Google Form.
+2. Add questions from `src/form_spec.py` or `src/faculty_form_spec.py`.
+3. Send the Google Form responder link by Gmail.
+4. Record the real send in `send_log.csv`.
 
-That requires the Forms API, the Sheets/Drive API, and the Gmail API, plus
-credentials the app can use.
+## What remains manual
 
-## One-time setup (developer, ~30 min)
+After the form is created, open the form, go to **Responses**, and connect the
+responses to a Google Sheet using the green Sheets button. This mirrors the
+normal Google Forms UI flow and keeps response ownership clear.
 
-1. Go to https://console.cloud.google.com and create a project, e.g. `ieor-visitday`.
-2. Under APIs and Services > Library, enable: Google Forms API, Google Drive API,
-   Google Sheets API, Gmail API.
-3. Under APIs and Services > OAuth consent screen, configure an internal app
-   (if using a berkeley.edu Workspace) and add yourself as a test user.
-4. Under Credentials, create an OAuth client ID of type Desktop app. Download the
-   JSON and save it as `credentials/oauth_client.json` (this folder is gitignored).
-5. First run will open a browser to authorize the staff Google account that will
-   own the forms and send the email. The resulting token is cached in
-   `credentials/token.json`.
+After responses arrive:
 
-Service-account alternative: a Workspace admin can create a service account with
-domain-wide delegation instead, which avoids the per-run browser prompt. Use this
-if a shared admin account should own everything. Either way, only `_build_live`
-in `src/google_intake.py` changes.
+1. Open the linked response Sheet.
+2. Export/download as CSV.
+3. Upload the CSV in the matching intake tab.
+4. Let the app convert it to solver-ready CSVs.
 
-## Implementing the live path later
+## One-time Google Cloud setup
 
-All Google calls live in one function: `_build_live` in `src/google_intake.py`.
-It currently raises `NotImplementedError`, and the Streamlit UI does not call it
-for real sending. To turn sending on later, implement it with
-`google-api-python-client` and `google-auth`, then keep preview, dry-run, final
-confirmation, and send-log requirements in place:
+1. Go to https://console.cloud.google.com and create a project, for example
+   `ieor-visitday`.
+2. Enable these APIs:
+   - Google Forms API
+   - Gmail API
+3. Configure the OAuth consent screen. For a Berkeley Workspace project, prefer
+   an internal app if available. Otherwise, add the staff sender account as a
+   test user while testing.
+4. Create an OAuth client ID of type **Desktop app**.
+5. Download the client JSON.
 
-```
-pip install google-api-python-client google-auth google-auth-oauthlib
-```
+The OAuth account you authorize should be the account that owns the Google Forms
+and sends the emails.
 
-Steps inside `_build_live`:
-- load credentials from `credentials/` (OAuth or service account),
-- create the form: build questions from the `spec` dict (it already encodes
-  every question type, title, and option list),
-- create and link the response sheet,
-- for each recipient, send the form URL via the Gmail API,
-- set `form_url` and `sheet_url` on the returned `IntakeResult`.
+## Generate a local OAuth token
 
-Only enable the live call after dry-run behavior is stable and reviewed. The
-button must remain disabled until staff have previewed recipients, subject, and
-body, and explicitly confirmed the send.
+Install dependencies:
 
-## After responses come in
-
-The staff-facing app can now handle the semi-automated CSV fallback:
-
-1. Build the Google Form manually using the downloadable form template CSV.
-2. Link the Google Form to a response Sheet.
-3. After responses arrive, export the Sheet as CSV.
-4. Upload the response CSV in the app.
-5. Download the solver-ready output files.
-
-Student response uploads produce:
-
-- `preferences.csv`
-- `student_interests.csv`
-
-Faculty response uploads produce:
-
-- `availability.csv`
-
-Developers can also run the student adapter from the command line:
-
-```
-python src/adapter.py path/to/responses.csv
+```bash
+pip install -r requirements.txt
 ```
 
-This writes `data/preferences.csv` and `data/student_interests.csv`. Load
-`preferences.csv` (with a faculty file and availability file) in the Build
-Schedule tab.
+Create a local gitignored credentials folder:
 
-Faculty availability parsing is implemented in `src/faculty_adapter.py` and is
-currently exposed through the Streamlit app.
+```bash
+mkdir credentials
+```
 
-## Known UX caveat: ordering 8 faculty
+Save the OAuth client file as:
 
-The form asks students to pick their top 8 faculty, then order them with 8
-sequential dropdowns. This produces clean, gap-free rankings the solver uses
-directly, but it is tedious for students with 25 faculty to scroll. If completion
-rates are low, the alternative is a small custom web form with drag-to-rank;
-that is a larger build and is not required for the pipeline to work.
+```text
+credentials/oauth_client.json
+```
+
+Run the app locally and attempt a live send, or run a small Python call to
+`send_intake(..., dry_run=False)`. The first authorization opens a browser and
+writes:
+
+```text
+credentials/token.json
+```
+
+Do not commit either credentials file.
+
+## Streamlit Cloud secrets
+
+Open the Streamlit app dashboard, then **Settings -> Secrets**. Add:
+
+```toml
+APP_PASSWORD = "replace-with-a-shared-internal-password"
+ENABLE_LIVE_EMAIL_SENDING = "true"
+GOOGLE_SENDER_EMAIL = "sender@example.edu"
+GOOGLE_OAUTH_TOKEN_JSON = """
+paste-the-entire-contents-of-credentials-token-json-here
+"""
+```
+
+Recommended rollout:
+
+1. Deploy first with `ENABLE_LIVE_EMAIL_SENDING = "false"`.
+2. Confirm dry-run previews and send logs work.
+3. Add `GOOGLE_OAUTH_TOKEN_JSON`.
+4. Change `ENABLE_LIVE_EMAIL_SENDING` to `"true"`.
+5. Send to one internal test recipient first.
+6. Confirm the form opens and the email is delivered.
+7. Link the form Responses tab to a Google Sheet.
+
+## Local environment alternative
+
+Instead of Streamlit Secrets, local developers can set environment variables:
+
+```powershell
+$env:APP_PASSWORD = "local-password"
+$env:ENABLE_LIVE_EMAIL_SENDING = "true"
+$env:GOOGLE_SENDER_EMAIL = "sender@example.edu"
+$env:GOOGLE_OAUTH_TOKEN_JSON = Get-Content credentials/token.json -Raw
+streamlit run app.py
+```
+
+If `GOOGLE_OAUTH_TOKEN_JSON` is not set locally, the app will look for
+`credentials/token.json`.
+
+## Safety rules
+
+- Never commit OAuth client JSON, token JSON, passwords, or sender credentials.
+- Keep CSV upload/download fallback workflows available.
+- Never bypass the in-app recipient preview and `SEND LIVE` confirmation.
+- Test student and faculty live sends with a small internal list before sending
+  to real participants.
+- If a live send fails, download `send_log.csv`, check Streamlit Cloud logs, and
+  verify the OAuth account still has Forms/Gmail API access.

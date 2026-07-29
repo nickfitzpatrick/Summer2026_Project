@@ -23,13 +23,11 @@ the final schedules.
 7. Review schedule diagnostics after solving.
 8. Download master, student, faculty, and email-ready exports.
 
-Live Google Forms, Google Sheets, and Gmail automation are intentionally still
-behind a stubbed integration path. Until credentials are provisioned and tested,
-the app should use preview, dry-run, template, and CSV fallback workflows.
-
-The student and faculty send sections are dry-run only in this version. Staff can
-preview recipients, subject, and body, then record a dry-run send log. No email is
-sent by the app.
+Live Google Form creation and Gmail sending are available behind a guarded
+workflow. Staff can preview recipients, subject, and body, record a dry run, and
+only send live after deployment owners configure Google OAuth credentials and set
+`ENABLE_LIVE_EMAIL_SENDING=true`. Google Sheet response linking remains a manual
+Google Forms step from the form's Responses tab.
 
 ## Run locally
 
@@ -163,7 +161,7 @@ state is not a permanent system of record.
 - `src/validation.py`: staff-facing input validation
 - `src/diagnostics.py`: schedule diagnostics tables
 - `src/exports.py`: downloadable schedule export tables
-- `src/google_intake.py`: isolated Google/Gmail integration boundary
+- `src/google_intake.py`: isolated Google Forms/Gmail integration boundary
 - `src/form_spec.py`: student preference form template
 - `src/faculty_form_spec.py`: faculty availability form template
 - `src/adapter.py`: student response CSV adapter
@@ -175,7 +173,7 @@ state is not a permanent system of record.
   secrets, or personal data.
 - Use Streamlit secrets or environment variables for credentials.
 - Set `APP_PASSWORD` in Streamlit Secrets before sharing a deployed app link.
-- Real sending must remain disabled until preview, dry-run, confirmation, and
-  logging flows are stable.
+- Real sending requires preview, dry-run, explicit `SEND LIVE` confirmation,
+  configured Google OAuth credentials, and `ENABLE_LIVE_EMAIL_SENDING=true`.
 - No send action should run automatically on page load.
 - Preserve CSV upload/download fallback workflows even after Google integration.

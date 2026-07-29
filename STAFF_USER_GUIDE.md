@@ -41,15 +41,19 @@ If you already have a file, use the optional CSV import section. The CSV can use
 Use **Download sample student CSV** if you want to test the upload flow without
 using real student data.
 
-Use the form preview to confirm the questions staff intend to send. In the
-current version, real Google/Gmail sending is not enabled; use the preview and
-CSV fallback workflow unless the project owner has explicitly configured live
-credentials.
+Use the form preview to confirm the questions staff intend to send. If the
+project owner has configured Google credentials and enabled live sending, staff
+can record a dry run first, then type `SEND LIVE` to create the Google Form and
+email students. If live sending is not enabled, use the template and CSV fallback
+workflow.
 
 Download the student form template CSV if you are building the Google Form
 manually. After students respond, export the response Sheet as CSV and upload it
 under **Import student responses**. The app will create downloadable
 `preferences.csv` and `student_interests.csv` files.
+
+If the app creates the Google Form for you, open the form after sending and link
+the Responses tab to a Google Sheet before collecting responses.
 
 ### 3. Load faculty availability
 
@@ -76,6 +80,9 @@ Download the faculty availability form template CSV if you are building the
 Google Form manually. After faculty respond, export the response Sheet as CSV and
 upload it under **Import faculty responses**. The app will create downloadable
 `availability.csv`.
+
+If the app creates the Google Form for you, open the form after sending and link
+the Responses tab to a Google Sheet before collecting responses.
 
 Faculty response parsing requires faculty IDs. When you use the direct-entry
 table, the app creates those IDs automatically.
@@ -184,9 +191,9 @@ them highly.
 
 ## Safety expectations
 
-The app should never send emails automatically. Any future sending workflow must
-show recipients, subject, body, dry-run status, and an explicit confirmation
-before sending.
+The app should never send emails automatically. Live sending must show
+recipients, subject, body, dry-run status, and an explicit `SEND LIVE`
+confirmation before sending.
 
 Do not enter credentials or passwords into code files. Use Streamlit secrets or
 environment variables when the deployment owner enables integrations.

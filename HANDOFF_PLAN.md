@@ -12,8 +12,10 @@ Development for launch readiness is on `v1-launch-ready`. Do not merge into
 - Scheduler input validation with blocking errors and reviewable warnings.
 - Student-level max meeting requests, defaulting to 4, with normalized
   satisfaction and meeting fulfillment diagnostics.
-- Dry-run-only send workflow with recipient, subject, body preview, confirmation,
-  and downloadable send log.
+- Guarded send workflow with recipient, subject, body preview, dry-run logging,
+  explicit `SEND LIVE` confirmation, and downloadable send log.
+- Google Form creation and Gmail sending behind Streamlit secrets and OAuth
+  credentials.
 - Semi-automated CSV fallback for Google Form responses:
   - student response CSV -> `preferences.csv`
   - faculty response CSV -> `availability.csv`
@@ -23,15 +25,14 @@ Development for launch readiness is on `v1-launch-ready`. Do not merge into
 - CSV sample files in `sample_data/` for testing uploads without hidden in-app
   test-data buttons.
 
-## What is intentionally not enabled
+## What is intentionally not automated
 
-- Real Gmail sending.
-- Automatic Google Form creation.
 - Automatic Google Sheet sync.
 - Re-optimizing around locked manual meetings.
 
-These require credential review, a private deployment posture, and one more round
-of UX testing around preview, dry-run, and confirmation.
+Google Sheet response linking still happens in the Google Forms UI from the
+Responses tab. Live sending requires credential review, a private deployment
+posture, and a small internal test before sending to real participants.
 
 ## Reviewer checklist
 
@@ -49,7 +50,9 @@ of UX testing around preview, dry-run, and confirmation.
 7. Download all exports.
 8. Record dry runs for student and faculty sends; confirm no email is sent.
 9. Download `send_log.csv`.
-10. Test the CSV fallback with exported Google response CSVs or synthetic samples.
+10. If live credentials are configured, send to one internal test recipient and
+    confirm the form/email flow works.
+11. Test the CSV fallback with exported Google response CSVs or synthetic samples.
 
 ## Operational notes
 
