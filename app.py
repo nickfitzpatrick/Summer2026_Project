@@ -132,6 +132,16 @@ st.markdown(
         border-radius: 10px; padding: 0.75rem 1rem; font-weight: 600;
         font-size: 0.96rem; margin: 0.7rem 0;
       }}
+      .guidebox {{
+        background: #fff8e6; border: 1px solid {GOLD}; border-left: 6px solid {GOLD};
+        border-radius: 10px; padding: 0.85rem 1rem; margin: 0.75rem 0 1rem;
+        color: {INK};
+      }}
+      .guidebox .gtitle {{
+        color: {NAVY}; font-weight: 800; font-size: 1rem; margin-bottom: 0.35rem;
+      }}
+      .guidebox ul {{ margin: 0.2rem 0 0 1.15rem; padding: 0; }}
+      .guidebox li {{ margin: 0.18rem 0; line-height: 1.35; }}
 
       /* overview cards: numbered, generous, friendly */
       .ovgrid {{
@@ -195,6 +205,14 @@ def step(n, text):
 
 def notice(text):
     st.markdown(f'<div class="notice">{text}</div>', unsafe_allow_html=True)
+
+
+def guide(title, items):
+    lis = "".join(f"<li>{item}</li>" for item in items)
+    st.markdown(
+        f'<div class="guidebox"><div class="gtitle">{title}</div><ul>{lis}</ul></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def rule():
@@ -734,6 +752,11 @@ def render_student_intake():
     DEFAULT_SUBJECT = "IEOR Visit Day: tell us which faculty you want to meet"
 
     step(1, "Enter prospective students")
+    guide("Staff checklist", [
+        "Enter one row per student with name, email, and max meetings requested.",
+        "Keep max meetings requested at 4 unless the program wants a different limit.",
+        "Use the optional CSV import only if you already have a clean name/email file.",
+    ])
     st.caption(
         "Type student names and emails directly. Add rows as needed. CSV upload is "
         "still available below if you already have a file. Max meetings requested "
@@ -791,6 +814,11 @@ def render_student_intake():
                 st.write("- ", e)
 
     step(2, "Prepare the preference form")
+    guide("Build the Google Form exactly from this template", [
+        "Copy question titles exactly; the response parser uses those titles to identify answers.",
+        "Set required questions as required in Google Forms; leave optional rankings optional.",
+        "Do not rename faculty options after students have started responding.",
+    ])
     spec = build_spec(ROSTER_XLSX)
     st.download_button(
         "Download student form template CSV",
@@ -813,6 +841,11 @@ def render_student_intake():
                 st.caption(f"Options: {shown}{more}")
 
     step(3, "Import student responses")
+    guide("Upload rule", [
+        "After responses are collected, open the linked Google Sheet and download as CSV.",
+        "Upload the CSV exactly as downloaded; do not delete columns or rename headers.",
+        "Warnings are okay to review, but errors must be fixed before scheduling.",
+    ])
     st.caption(
         "After collecting Google Form responses, download the response Sheet as CSV "
         "and upload it here. The app converts it to solver-ready preferences.csv."
@@ -845,6 +878,11 @@ def render_student_intake():
         )
 
     with st.expander("Prepare staff-send email package", expanded=True):
+        guide("Manual send rule", [
+            "Replace the form-link placeholder in the email text with the real Google Form URL.",
+            "Send the email manually through Gmail or Outlook; the app does not send live email.",
+            "Record the package after reviewing recipients, subject, and body.",
+        ])
         last = send_log.last_send()
         if last:
             notice(
@@ -903,6 +941,11 @@ def render_faculty_intake():
         return
 
     step(1, "Enter faculty")
+    guide("Staff checklist", [
+        "Enter one row per faculty member with name and email.",
+        "Use consistent faculty names; student preferences and faculty availability depend on matching names.",
+        "Area is optional and can be left blank if staff do not need it.",
+    ])
     st.caption(
         "Type faculty names and emails directly. The app will assign simple faculty IDs "
         "for the availability workflow. Area is optional."
@@ -954,6 +997,11 @@ def render_faculty_intake():
                 st.write("- ", e)
 
     step(2, "Prepare the availability form")
+    guide("Build the Google Form exactly from this template", [
+        "Create one checkbox question for each visit day shown in the template.",
+        "Keep time-window labels unchanged so the app can map answers back to schedule slots.",
+        "Ask faculty to check every window they are available; unchecked means unavailable.",
+    ])
     st.caption("The available time windows come from your visit-day structure.")
     st.download_button(
         "Download faculty availability form template CSV",
@@ -977,6 +1025,11 @@ def render_faculty_intake():
                 st.caption(f"Options: {shown}{more}")
 
     step(3, "Import faculty responses")
+    guide("Upload rule", [
+        "Download the linked Google Sheet responses as CSV after faculty submit availability.",
+        "Upload the CSV exactly as downloaded; do not rename time-window columns.",
+        "If the app warns about matching, check faculty names/emails against the table above.",
+    ])
     st.caption(
         "After collecting Google Form responses, download the response Sheet as CSV "
         "and upload it here. The app converts checked time windows to availability.csv."
@@ -1003,6 +1056,11 @@ def render_faculty_intake():
         )
 
     with st.expander("Prepare staff-send email package", expanded=True):
+        guide("Manual send rule", [
+            "Replace the form-link placeholder in the email text with the real Google Form URL.",
+            "Send the email manually through Gmail or Outlook; the app does not send live email.",
+            "Record the package after reviewing recipients, subject, and body.",
+        ])
         last = send_log.last_send(key="faculty")
         if last:
             notice(
@@ -1083,6 +1141,11 @@ with tabs[3]:
 # =====================================================================
 def render_matching():
     step(1, "Load data")
+    guide("Choose the correct source", [
+        "Use Demo Data only for practice or demonstrations.",
+        "Use Collected Data for real visit-day scheduling.",
+        "If you parsed responses in tabs 3 and 4 during this session, click Use parsed response data from this session.",
+    ])
     source = st.radio(
         "Load data source",
         ["Use Demo Data", "Use Collected Data"],
@@ -1146,6 +1209,11 @@ def render_matching():
 
     rule()
     step(2, "Build the schedule")
+    guide("Before clicking Match", [
+        "Fix all red errors; the button stays disabled until required data is valid.",
+        "Review yellow warnings because they may explain missing or uneven meetings.",
+        "Use the same visit-day setup that faculty used when submitting availability.",
+    ])
     st.caption(
         "The optimizer respects each student's effective max meetings: the smaller of "
         "their requested max, their number of ranked faculty, and the number of available slots."
@@ -1202,6 +1270,11 @@ def render_matching():
         exports = build_export_tables(sched, dx["student_outcomes"])
 
         step(3, "Results")
+        guide("Finalize carefully", [
+            "Start with Needs review and the notes below; these are the main staff-facing diagnostics.",
+            "Check individual student and faculty schedules before sending final schedules.",
+            "Use manual edits only for small final corrections, then download all export files.",
+        ])
         action_count = sum(1 for note in dx.get("notes", []) if note["level"] in {"Action", "Bottleneck"})
         cards = [
             ("navy", "Meetings scheduled", str(mx["total_meetings"])),
@@ -1282,6 +1355,11 @@ def render_matching():
             with st.expander("Open manual adjustment tools", expanded=False):
                 render_manual_review(r)
         with view_exports:
+            guide("Save these files outside Streamlit", [
+                "Download exports after every final run; Streamlit is not a permanent archive.",
+                "Save the master schedule and student/faculty schedules in the team's shared folder.",
+                "Use the email-text exports when staff are ready to notify participants of final schedules.",
+            ])
             st.caption("Download these files after each final run so the visit-day record is saved outside the app session.")
             st.download_button(
                 "Download master schedule CSV",
