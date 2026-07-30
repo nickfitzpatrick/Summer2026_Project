@@ -49,19 +49,6 @@ def _configured_password():
         return os.environ.get("APP_PASSWORD", "")
 
 
-def _secret_value(name, default=""):
-    value = os.environ.get(name, default)
-    try:
-        return st.secrets.get(name, value)
-    except Exception:
-        return value
-
-
-def _secret_bool(name, default=False):
-    raw = str(_secret_value(name, str(default))).strip().lower()
-    return raw in {"1", "true", "yes", "on"}
-
-
 def require_login():
     password = _configured_password()
     if not password:
@@ -238,6 +225,16 @@ def sample_download(filename, label=None, key=None):
         )
 
 
+def download_text(label, text, filename, key):
+    st.download_button(
+        label,
+        text.encode("utf-8"),
+        filename,
+        "text/plain",
+        key=key,
+    )
+
+
 def message_body(audience):
     if audience == "student":
         return (
@@ -254,6 +251,50 @@ def message_body(audience):
         "Form link: [form link will be inserted here]\n\n"
         "Thank you,\nIEOR Staff"
     )
+
+
+def staff_send_steps(audience):
+    person = "students" if audience == "student" else "faculty"
+    form_name = "student preference form" if audience == "student" else "faculty availability form"
+    return (
+        f"1. Build the {form_name} in Google Forms using the template CSV above.\n"
+        "2. Replace the placeholder in the email body with the real Google Form link.\n"
+        f"3. Send the email to the downloaded {person} recipient list using Gmail or Outlook.\n"
+        "4. In Google Forms, link the Responses tab to a Google Sheet.\n"
+        "5. After responses arrive, download the Sheet as CSV and upload it back here.\n"
+    )
+
+
+def render_email_package_downloads(audience, recipients, subject, body, key_prefix):
+    st.markdown("**Staff-send package**")
+    st.caption(
+        "The app prepares the files and text. Staff send the email manually, then upload "
+        "the response CSV after Google Forms responses arrive."
+    )
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.download_button(
+            "Download recipients CSV",
+            recipients.to_csv(index=False).encode("utf-8"),
+            f"{audience}_recipients.csv",
+            "text/csv",
+            key=f"{key_prefix}_recipients_download",
+        )
+    with c2:
+        email_text = f"Subject: {subject}\n\n{body}"
+        download_text(
+            "Download email text",
+            email_text,
+            f"{audience}_email_text.txt",
+            key=f"{key_prefix}_email_text_download",
+        )
+    with c3:
+        download_text(
+            "Download send steps",
+            staff_send_steps(audience),
+            f"{audience}_staff_send_steps.txt",
+            key=f"{key_prefix}_steps_download",
+        )
 
 
 def spec_template_df(spec):
@@ -588,14 +629,13 @@ with tabs[0]:
          "meeting slots each day has as you make changes."),
         ("Prospective students",
          "Next, enter student names and emails directly, or import a CSV if one already "
-         "exists. The tool prepares a preference-form template that asks students to rank "
-         "faculty and choose research interests. Email sending stays in dry-run preview "
-         "mode until a live integration is configured."),
+         "exists. The tool prepares a preference-form template, recipient list, and email "
+         "text. Staff send the email manually, then upload the exported response CSV."),
         ("Faculty availability",
          "Now collect faculty availability. Enter faculty names and emails directly, "
-         "with optional research areas, and download the availability-form template. "
-         "After responses come back, upload the response CSV and the app converts checked "
-         "time windows into scheduler-ready availability."),
+         "with optional research areas, then download the availability-form template and "
+         "staff-send package. After responses come back, upload the response CSV and the "
+         "app converts checked time windows into scheduler-ready availability."),
         ("Build schedules",
          "Finally, generate the schedules. The tool takes everything you have collected, "
          "the students' ranked preferences, each faculty member's availability, and your "
@@ -686,7 +726,7 @@ with tabs[1]:
 # TAB 3 - CONTACT PROSPECTIVE STUDENTS (preference form)
 # =====================================================================
 def render_student_intake():
-    from google_intake import send_intake, live_config_status
+    from google_intake import send_intake
     from form_spec import build_spec
     from adapter import adapt
     import send_log
@@ -804,13 +844,12 @@ def render_student_intake():
             key="student_interests_download",
         )
 
-    with st.expander("Optional: preview and send email", expanded=False):
+    with st.expander("Prepare staff-send email package", expanded=True):
         last = send_log.last_send()
         if last:
-            tag = " (simulated)" if last.get("simulated") else ""
             notice(
-                f"Last sent {send_log.pretty_time(last['timestamp'])} to "
-                f"{last['n_recipients']} students{tag}."
+                f"Last package recorded {send_log.pretty_time(last['timestamp'])} "
+                f"for {last['n_recipients']} students."
             )
         subject = st.text_input(
             "Email subject line",
@@ -820,13 +859,13 @@ def render_student_intake():
         st.markdown("**Recipient preview**")
         st.dataframe(pd.DataFrame(result.recipients), hide_index=True, use_container_width=True)
         body = st.text_area("Email body preview", value=message_body("student"), height=180, key="student_body")
-        dry_run = st.checkbox("Dry run only - do not send email", value=True, disabled=True, key="student_dry")
+        render_email_package_downloads("student", recipients, subject, body, "student_package")
         confirmed = st.checkbox(
-            "I reviewed the recipients, subject, and body for this dry run.",
+            "I reviewed the recipients, subject, and body. Staff will send this manually.",
             key="student_confirm",
         )
 
-        if st.button("Record student dry run", type="primary", disabled=not (result.ok and dry_run and confirmed)):
+        if st.button("Record student send package", type="primary", disabled=not (result.ok and confirmed)):
             entry = send_log.record_send(
                 result.n_recipients,
                 subject,
@@ -834,61 +873,12 @@ def render_student_intake():
                 key="student",
                 body=body,
                 dry_run=True,
-                status="dry_run_recorded",
+                status="staff_send_package_prepared",
             )
             st.success(
-                f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
-                f"for {entry['n_recipients']} students. No email was sent."
+                f"Package recorded on {send_log.pretty_time(entry['timestamp'])} "
+                f"for {entry['n_recipients']} students. Staff still sends the email manually."
             )
-
-        live_enabled = _secret_bool("ENABLE_LIVE_EMAIL_SENDING")
-        google_ready, google_missing = live_config_status()
-        if not live_enabled:
-            st.info("Live email sending is locked. Set ENABLE_LIVE_EMAIL_SENDING=true in Streamlit Secrets after testing.")
-        elif not google_ready:
-            st.warning("Live email sending is enabled, but Google credentials are missing.")
-            for msg in google_missing:
-                st.caption(msg)
-        else:
-            st.markdown("**Live send**")
-            st.warning("This will create a real Google Form and email every listed student.")
-            live_reviewed = st.checkbox(
-                "I completed a dry run and reviewed the recipient list, subject, and body.",
-                key="student_live_reviewed",
-            )
-            live_phrase = st.text_input("Type SEND LIVE to enable the live send button", key="student_live_phrase")
-            can_live_send = result.ok and live_reviewed and live_phrase.strip() == "SEND LIVE"
-            if st.button("Create form and send student emails", type="primary", disabled=not can_live_send):
-                live_result = send_intake(
-                    recipients,
-                    roster_path=ROSTER_XLSX,
-                    dry_run=False,
-                    subject=subject,
-                    body=body,
-                    sender=_secret_value("GOOGLE_SENDER_EMAIL"),
-                )
-                if live_result.ok:
-                    entry = send_log.record_send(
-                        live_result.n_recipients,
-                        subject,
-                        form_url=live_result.form_url,
-                        sheet_url=live_result.sheet_url,
-                        simulated=False,
-                        key="student",
-                        body=body,
-                        dry_run=False,
-                        status="live_sent",
-                    )
-                    st.success(
-                        f"Live send recorded on {send_log.pretty_time(entry['timestamp'])} "
-                        f"for {entry['n_recipients']} students."
-                    )
-                    st.link_button("Open student Google Form", live_result.form_url)
-                    st.info("Open the form Responses tab and link responses to a Google Sheet before collecting data.")
-                else:
-                    st.error("Live student send failed.")
-                    for err in live_result.errors:
-                        st.warning(err)
         send_log_download(send_log, key="student_send_log_download")
 
 
@@ -900,7 +890,7 @@ with tabs[2]:
 # TAB 4 - CONTACT FACULTY AVAILABILITY (availability form)
 # =====================================================================
 def render_faculty_intake():
-    from google_intake import send_intake, live_config_status
+    from google_intake import send_intake
     from faculty_form_spec import build_faculty_spec
     from faculty_adapter import adapt_faculty_availability
     import send_log
@@ -1012,13 +1002,12 @@ def render_faculty_intake():
             key="faculty_availability_download",
         )
 
-    with st.expander("Optional: preview and send email", expanded=False):
+    with st.expander("Prepare staff-send email package", expanded=True):
         last = send_log.last_send(key="faculty")
         if last:
-            tag = " (simulated)" if last.get("simulated") else ""
             notice(
-                f"Last sent {send_log.pretty_time(last['timestamp'])} to "
-                f"{last['n_recipients']} faculty{tag}."
+                f"Last package recorded {send_log.pretty_time(last['timestamp'])} "
+                f"for {last['n_recipients']} faculty."
             )
         subject = st.text_input(
             "Email subject line",
@@ -1028,13 +1017,13 @@ def render_faculty_intake():
         st.markdown("**Recipient preview**")
         st.dataframe(pd.DataFrame(result.recipients), hide_index=True, use_container_width=True)
         body = st.text_area("Email body preview", value=message_body("faculty"), height=180, key="faculty_body")
-        dry_run = st.checkbox("Dry run only - do not send email", value=True, disabled=True, key="faculty_dry")
+        render_email_package_downloads("faculty", recipients, subject, body, "faculty_package")
         confirmed = st.checkbox(
-            "I reviewed the recipients, subject, and body for this dry run.",
+            "I reviewed the recipients, subject, and body. Staff will send this manually.",
             key="faculty_confirm",
         )
 
-        if st.button("Record faculty dry run", type="primary", disabled=not (result.ok and dry_run and confirmed)):
+        if st.button("Record faculty send package", type="primary", disabled=not (result.ok and confirmed)):
             entry = send_log.record_send(
                 result.n_recipients,
                 subject,
@@ -1042,61 +1031,12 @@ def render_faculty_intake():
                 key="faculty",
                 body=body,
                 dry_run=True,
-                status="dry_run_recorded",
+                status="staff_send_package_prepared",
             )
             st.success(
-                f"Dry run recorded on {send_log.pretty_time(entry['timestamp'])} "
-                f"for {entry['n_recipients']} faculty. No email was sent."
+                f"Package recorded on {send_log.pretty_time(entry['timestamp'])} "
+                f"for {entry['n_recipients']} faculty. Staff still sends the email manually."
             )
-
-        live_enabled = _secret_bool("ENABLE_LIVE_EMAIL_SENDING")
-        google_ready, google_missing = live_config_status()
-        if not live_enabled:
-            st.info("Live email sending is locked. Set ENABLE_LIVE_EMAIL_SENDING=true in Streamlit Secrets after testing.")
-        elif not google_ready:
-            st.warning("Live email sending is enabled, but Google credentials are missing.")
-            for msg in google_missing:
-                st.caption(msg)
-        else:
-            st.markdown("**Live send**")
-            st.warning("This will create a real Google Form and email every listed faculty member.")
-            live_reviewed = st.checkbox(
-                "I completed a dry run and reviewed the recipient list, subject, and body.",
-                key="faculty_live_reviewed",
-            )
-            live_phrase = st.text_input("Type SEND LIVE to enable the live send button", key="faculty_live_phrase")
-            can_live_send = result.ok and live_reviewed and live_phrase.strip() == "SEND LIVE"
-            if st.button("Create form and send faculty emails", type="primary", disabled=not can_live_send):
-                live_result = send_intake(
-                    recipients,
-                    spec=spec,
-                    dry_run=False,
-                    subject=subject,
-                    body=body,
-                    sender=_secret_value("GOOGLE_SENDER_EMAIL"),
-                )
-                if live_result.ok:
-                    entry = send_log.record_send(
-                        live_result.n_recipients,
-                        subject,
-                        form_url=live_result.form_url,
-                        sheet_url=live_result.sheet_url,
-                        simulated=False,
-                        key="faculty",
-                        body=body,
-                        dry_run=False,
-                        status="live_sent",
-                    )
-                    st.success(
-                        f"Live send recorded on {send_log.pretty_time(entry['timestamp'])} "
-                        f"for {entry['n_recipients']} faculty."
-                    )
-                    st.link_button("Open faculty Google Form", live_result.form_url)
-                    st.info("Open the form Responses tab and link responses to a Google Sheet before collecting data.")
-                else:
-                    st.error("Live faculty send failed.")
-                    for err in live_result.errors:
-                        st.warning(err)
         send_log_download(send_log, key="faculty_send_log_download")
 
     with st.expander("Optional: view imported faculty availability", expanded=False):
@@ -1262,11 +1202,12 @@ def render_matching():
         exports = build_export_tables(sched, dx["student_outcomes"])
 
         step(3, "Results")
+        action_count = sum(1 for note in dx.get("notes", []) if note["level"] in {"Action", "Bottleneck"})
         cards = [
-            ("navy", "Total meetings", str(mx["total_meetings"])),
-            ("gold", "Avg normalized satisfaction", f"{dx['summary']['avg_normalized_satisfaction']:.0%}"),
-            ("navy", "Meeting fulfillment", f"{dx['summary']['avg_meeting_fulfillment_rate']:.0%}"),
-            ("gold", "Top-1 hit rate", f"{dx['summary']['top_1_hit_rate']:.0%}"),
+            ("navy", "Meetings scheduled", str(mx["total_meetings"])),
+            ("gold", "Capacity used", f"{dx['summary']['utilization_rate']:.0%}"),
+            ("navy", "Avg meetings/student", f"{dx['summary']['avg_meetings_per_student']:.1f}"),
+            ("gold", "Needs review", str(action_count)),
         ]
         html = '<div class="cardrow">' + "".join(
             f'<div class="card {c}"><div class="label">{lab}</div>'
@@ -1276,20 +1217,19 @@ def render_matching():
         st.markdown(html, unsafe_allow_html=True)
         st.caption(f"Solver status: {r['status']}  |  objective: {r['objective']:.0f}")
 
-        if dx["warnings"]:
-            with st.expander("Diagnostics warnings", expanded=True):
-                for msg in dx["warnings"]:
-                    st.warning(msg)
+        st.markdown("**Review before finalizing**")
+        for note in dx.get("notes", [])[:5]:
+            if note["level"] == "Action":
+                st.error(f"{note['title']}: {note['detail']}")
+            elif note["level"] == "Bottleneck":
+                st.warning(f"{note['title']}: {note['detail']}")
+            elif note["level"] == "OK":
+                st.success(f"{note['title']}: {note['detail']}")
+            else:
+                st.info(f"{note['title']}: {note['detail']}")
 
-        dsum = dx["summary"]
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Capacity used", f"{dsum['utilization_rate']:.0%}")
-        c2.metric("Available slots", f"{dsum['total_capacity']}")
-        c3.metric("Top-2 hit rate", f"{dsum['top_2_hit_rate']:.0%}")
-        c4.metric("Lowest meetings", f"{dsum['lowest_student_meetings']}")
-
-        view_stu, view_fac, view_manual, view_diag, view_exports = st.tabs([
-            "By student", "By faculty", "Manual review", "Diagnostics", "Exports"
+        view_stu, view_fac, view_diag, view_manual, view_exports = st.tabs([
+            "Student schedules", "Faculty schedules", "Review notes", "Manual edits", "Exports"
         ])
         with view_stu:
             pick = st.selectbox("View a student", sorted(sched["student_id"].unique()))
@@ -1303,18 +1243,9 @@ def render_matching():
                 sched[sched["faculty"] == fpick][["day", "start", "end", "student_id"]],
                 hide_index=True, use_container_width=True,
             )
-        with view_manual:
-            with st.expander("Open manual adjustment tools", expanded=False):
-                render_manual_review(r)
         with view_diag:
-            st.caption(
-                "Raw satisfaction is total assigned preference value. Normalized satisfaction "
-                "compares that value to the best possible value from the student's own preference "
-                "list and effective max meetings. Meeting fulfillment shows whether the student "
-                "received the number of meetings requested."
-            )
-            st.markdown("**Things to review**")
-            for note in dx.get("notes", []):
+            st.caption("Use these notes to decide whether the schedule is ready or needs a small manual adjustment.")
+            for note in dx.get("notes", [])[5:]:
                 if note["level"] == "Action":
                     st.error(f"{note['title']}: {note['detail']}")
                 elif note["level"] == "Bottleneck":
@@ -1323,16 +1254,33 @@ def render_matching():
                     st.success(f"{note['title']}: {note['detail']}")
                 else:
                     st.info(f"{note['title']}: {note['detail']}")
-            with st.expander("Faculty capacity and utilization", expanded=True):
-                st.dataframe(dx["faculty_capacity"], hide_index=True, use_container_width=True)
-            with st.expander("Student outcomes", expanded=False):
-                st.dataframe(dx["student_outcomes"], hide_index=True, use_container_width=True)
-            with st.expander("Short vs long preference-list comparison", expanded=False):
-                st.dataframe(dx["preference_length_comparison"], hide_index=True, use_container_width=True)
-            with st.expander("Faculty demand and bottlenecks", expanded=False):
-                st.dataframe(dx["faculty_demand"], hide_index=True, use_container_width=True)
-            with st.expander("Unassigned preferences", expanded=False):
-                st.dataframe(dx["unassigned_preferences"], hide_index=True, use_container_width=True)
+            if len(dx.get("notes", [])) <= 5:
+                st.success("No additional review notes.")
+            with st.expander("Advanced details for troubleshooting", expanded=False):
+                st.markdown("**Faculty capacity**")
+                st.dataframe(
+                    dx["faculty_capacity"][["name", "available_slots", "scheduled_meetings", "unused_capacity"]],
+                    hide_index=True,
+                    use_container_width=True,
+                )
+                st.markdown("**Students to check first**")
+                st.dataframe(
+                    dx["student_outcomes"][[
+                        "student_id", "assigned_meetings", "effective_max_meetings",
+                        "top3_met", "meeting_fulfillment_rate"
+                    ]].head(20),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+                st.markdown("**Popular faculty demand**")
+                st.dataframe(
+                    dx["faculty_demand"][["name", "total_rankings", "top3_rankings", "scheduled_meetings"]].head(20),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+        with view_manual:
+            with st.expander("Open manual adjustment tools", expanded=False):
+                render_manual_review(r)
         with view_exports:
             st.caption("Download these files after each final run so the visit-day record is saved outside the app session.")
             st.download_button(

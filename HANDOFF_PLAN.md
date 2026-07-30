@@ -12,10 +12,8 @@ Development for launch readiness is on `v1-launch-ready`. Do not merge into
 - Scheduler input validation with blocking errors and reviewable warnings.
 - Student-level max meeting requests, defaulting to 4, with normalized
   satisfaction and meeting fulfillment diagnostics.
-- Guarded send workflow with recipient, subject, body preview, dry-run logging,
-  explicit `SEND LIVE` confirmation, and downloadable send log.
-- Google Form creation and Gmail sending behind Streamlit secrets and OAuth
-  credentials.
+- Staff-controlled intake workflow with form templates, recipient CSVs, email
+  text downloads, send-package logging, and response CSV upload.
 - Semi-automated CSV fallback for Google Form responses:
   - student response CSV -> `preferences.csv`
   - faculty response CSV -> `availability.csv`
@@ -27,12 +25,14 @@ Development for launch readiness is on `v1-launch-ready`. Do not merge into
 
 ## What is intentionally not automated
 
+- Live Gmail/Outlook sending.
+- Automatic Google Form creation.
 - Automatic Google Sheet sync.
 - Re-optimizing around locked manual meetings.
 
-Google Sheet response linking still happens in the Google Forms UI from the
-Responses tab. Live sending requires credential review, a private deployment
-posture, and a small internal test before sending to real participants.
+Staff build/send the Google Forms manually and link each form's Responses tab to
+a Google Sheet. This avoids OAuth, Google Cloud setup, sender-permission issues,
+and token maintenance during handoff.
 
 ## Reviewer checklist
 
@@ -40,19 +40,16 @@ posture, and a small internal test before sending to real participants.
 2. Use demo data to build a schedule.
 3. Download and re-upload the sample CSVs from `sample_data/`.
 4. Confirm validation appears before solving.
-5. Confirm diagnostics explain capacity, demand, student outcomes, and unassigned
-   preferences.
+5. Confirm the simplified review notes flag practical issues before finalizing.
 6. Try manual review:
    - lock a meeting
    - unlock it
    - remove an unlocked meeting
    - add a non-conflicting meeting
 7. Download all exports.
-8. Record dry runs for student and faculty sends; confirm no email is sent.
+8. Download student/faculty send packages; confirm no email is sent by the app.
 9. Download `send_log.csv`.
-10. If live credentials are configured, send to one internal test recipient and
-    confirm the form/email flow works.
-11. Test the CSV fallback with exported Google response CSVs or synthetic samples.
+10. Test the CSV fallback with exported Google response CSVs or synthetic samples.
 
 ## Operational notes
 

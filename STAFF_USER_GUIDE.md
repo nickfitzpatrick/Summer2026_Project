@@ -41,11 +41,10 @@ If you already have a file, use the optional CSV import section. The CSV can use
 Use **Download sample student CSV** if you want to test the upload flow without
 using real student data.
 
-Use the form preview to confirm the questions staff intend to send. If the
-project owner has configured Google credentials and enabled live sending, staff
-can record a dry run first, then type `SEND LIVE` to create the Google Form and
-email students. If live sending is not enabled, use the template and CSV fallback
-workflow.
+Use the form preview to confirm the questions staff intend to send. The app
+prepares a staff-send package: form template, recipient list, email text, and
+short send steps. Staff build/send the Google Form manually through normal
+Gmail/Outlook workflows.
 
 Download the student form template CSV if you are building the Google Form
 manually. After students respond, export the response Sheet as CSV and upload it
@@ -112,32 +111,18 @@ because they may explain sparse or uneven schedules.
 
 ### 5. Review diagnostics
 
-After solving, review:
+After solving, start with the simplified review panel:
 
-- things to review, which highlights issues such as faculty with no meetings,
-  faculty nobody selected, students with weak outcomes, and popular faculty
-  bottlenecks
 - total meetings
 - capacity utilization
 - average meetings per student
-- lowest meetings assigned to any student
-- faculty capacity table
-- student outcomes table
-- faculty demand table
-- unassigned preferences
+- number of items needing review
+- plain-language review notes
 
-These diagnostics help explain bottlenecks such as popular faculty with limited
-availability or students with too few ranked preferences.
-
-Important metric definitions:
-
-- Raw satisfaction measures total assigned preference value.
-- Normalized satisfaction measures how well a student's own preference list was
-  fulfilled, adjusted for the student's effective max meetings.
-- Meeting fulfillment rate measures whether the student received the number of
-  meetings requested.
-- Top-1 / top-2 hit rates show whether students received their highest-priority
-  faculty, not just more meetings overall.
+The review notes highlight practical issues such as faculty with no meetings,
+faculty nobody selected, students who may need manual attention, and popular
+faculty bottlenecks. Detailed diagnostic tables are available only in the
+optional troubleshooting expander.
 
 ### 6. Make manual adjustments
 
@@ -191,9 +176,8 @@ them highly.
 
 ## Safety expectations
 
-The app should never send emails automatically. Live sending must show
-recipients, subject, body, dry-run status, and an explicit `SEND LIVE`
-confirmation before sending.
+The launch workflow does not send emails automatically. Staff should use the
+downloaded recipient list and email text, then send through Gmail or Outlook.
 
 Do not enter credentials or passwords into code files. Use Streamlit secrets or
 environment variables when the deployment owner enables integrations.

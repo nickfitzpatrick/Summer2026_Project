@@ -15,7 +15,7 @@ the final schedules.
 2. Enter prospective student names/emails directly, or import an optional CSV,
    set each student's max meetings requested, then preview the student
    preference form.
-3. Download form templates or upload exported student response CSVs.
+3. Download form templates, recipient lists, and email text for staff to send manually.
 4. Enter faculty names/emails directly, preview the faculty availability form,
    and upload exported faculty response CSVs.
 5. Build schedules from demo data, parsed session data, or uploaded CSVs.
@@ -23,11 +23,10 @@ the final schedules.
 7. Review schedule diagnostics after solving.
 8. Download master, student, faculty, and email-ready exports.
 
-Live Google Form creation and Gmail sending are available behind a guarded
-workflow. Staff can preview recipients, subject, and body, record a dry run, and
-only send live after deployment owners configure Google OAuth credentials and set
-`ENABLE_LIVE_EMAIL_SENDING=true`. Google Sheet response linking remains a manual
-Google Forms step from the form's Responses tab.
+The intake workflow is semi-automated and staff-controlled. The app prepares
+Google Form templates, recipient lists, and email text, but staff send emails
+manually through Gmail/Outlook and upload exported response CSVs after forms are
+collected. This avoids Google Cloud/OAuth setup and keeps handoff simpler.
 
 ## Run locally
 
@@ -119,24 +118,18 @@ Errors block scheduling. Warnings allow scheduling but should be reviewed.
 
 ## Diagnostics and exports
 
-After a successful solve, the app shows:
+After a successful solve, the app shows a simplified review dashboard:
 
-- solver status and objective
 - total meetings
 - capacity utilization
 - average meetings per student
-- lowest meetings assigned to any student
-- faculty capacity used vs available
-- faculty popularity and unmet demand
-- student outcomes and low-satisfaction cases
-- raw satisfaction, normalized satisfaction, and meeting fulfillment rate
-- top-1 and top-2 hit rates
-- unassigned preferences
+- number of issues that need review
+- plain-language review notes, such as faculty with no meetings, faculty nobody
+  selected, students with weak outcomes, and popular faculty bottlenecks
 
-Raw satisfaction is the total assigned preference value. Normalized satisfaction
-compares that value with the best possible value from the student's own submitted
-preference list and effective max meetings. Meeting fulfillment rate measures
-whether the student received the number of meetings requested.
+Detailed diagnostic tables are still available in an optional troubleshooting
+section, but the default view is designed for staff review rather than model
+debugging.
 
 Downloadable files:
 
@@ -161,7 +154,7 @@ state is not a permanent system of record.
 - `src/validation.py`: staff-facing input validation
 - `src/diagnostics.py`: schedule diagnostics tables
 - `src/exports.py`: downloadable schedule export tables
-- `src/google_intake.py`: isolated Google Forms/Gmail integration boundary
+- `src/google_intake.py`: recipient validation and staff-send package boundary
 - `src/form_spec.py`: student preference form template
 - `src/faculty_form_spec.py`: faculty availability form template
 - `src/adapter.py`: student response CSV adapter
@@ -173,7 +166,7 @@ state is not a permanent system of record.
   secrets, or personal data.
 - Use Streamlit secrets or environment variables for credentials.
 - Set `APP_PASSWORD` in Streamlit Secrets before sharing a deployed app link.
-- Real sending requires preview, dry-run, explicit `SEND LIVE` confirmation,
-  configured Google OAuth credentials, and `ENABLE_LIVE_EMAIL_SENDING=true`.
-- No send action should run automatically on page load.
-- Preserve CSV upload/download fallback workflows even after Google integration.
+- The app should not send live email in the launch workflow.
+- Staff should send emails manually through Gmail/Outlook using the generated
+  recipients and email text.
+- Preserve CSV upload/download workflows as the primary handoff path.

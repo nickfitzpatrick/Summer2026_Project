@@ -4,8 +4,9 @@ This gives the team a persistent URL (e.g. `https://ieor-visitday.streamlit.app`
 that runs `app.py` with no local setup. Free for public or Berkeley-account repos.
 
 The app can deploy with demo data, but set `APP_PASSWORD` in Streamlit Secrets
-before sharing a public URL. The Google Forms / Gmail intake is optional and
-stays disabled on the hosted version until credentials are configured.
+before sharing a public URL. The launch intake workflow is staff-controlled:
+the app generates templates, recipient lists, and email text; staff send emails
+manually and upload exported response CSVs.
 
 ## Prerequisites
 
@@ -44,16 +45,7 @@ Secrets**. Use TOML-style values like:
 
 ```toml
 APP_PASSWORD = "replace-with-a-shared-internal-password"
-ENABLE_LIVE_EMAIL_SENDING = "false"
-GOOGLE_SENDER_EMAIL = "ieor-visitday@example.edu"
-GOOGLE_OAUTH_TOKEN_JSON = """
-paste-the-entire-contents-of-credentials-token-json-here
-"""
 ```
-
-Keep `ENABLE_LIVE_EMAIL_SENDING = "false"` until dry-run previews, send logs,
-and one internal test recipient have been verified. See `SETUP_GOOGLE.md` for
-the OAuth token setup.
 
 Local developers can create `.streamlit/secrets.toml` with the same structure.
 That file must not be committed.
@@ -89,11 +81,10 @@ the pipeline test also verifies the solver path.
 - `requirements.txt` already pins `ortools`, `streamlit`, `pandas`, `numpy`,
   `openpyxl`, `ics`. `ortools` is large; if the build times out, redeploy once.
 - `IEOR_Faculty_Roster.xlsx` is committed, so the app finds the roster on the host.
-- Live form/email sending is guarded by `ENABLE_LIVE_EMAIL_SENDING`, Google
-  OAuth credentials, recipient preview, and an in-app `SEND LIVE` confirmation.
-  Do not put `credentials/oauth_client.json` or `credentials/token.json` in git.
-- After the app creates a Google Form, staff still need to open the form's
-  Responses tab and link it to a Google Sheet before collecting responses.
+- The app does not send live email in the launch workflow. Staff use the
+  downloaded recipients and email text in Gmail or Outlook.
+- Staff should manually link each Google Form's Responses tab to a Google Sheet
+  before collecting responses.
 - The app reads/writes `data/` and `outputs/` at runtime. On Streamlit Cloud these
   are ephemeral (reset on redeploy), which is correct for a demo. Anything staff
   need to keep, they download via the in-app buttons.
