@@ -380,6 +380,16 @@ def load_csv_into_editor(uploaded_file, state_key, add_faculty_ids=False, add_st
             st.session_state[state_key] = df[["name", "email"]]
 
 
+def uploaded_file_signature(uploaded_file):
+    if uploaded_file is None:
+        return None
+    return (
+        getattr(uploaded_file, "name", ""),
+        getattr(uploaded_file, "size", None),
+        getattr(uploaded_file, "file_id", None),
+    )
+
+
 def _clean_max_meetings(value):
     try:
         if pd.isna(value) or str(value).strip() == "":
@@ -790,8 +800,10 @@ def render_student_intake():
     with st.expander("Optional: import students from CSV", expanded=False):
         sample_download("test_students.csv", "Download sample student CSV", key="sample_students_download")
         stu_file = st.file_uploader("Student list (CSV)", type="csv", key="intake_csv")
-        if stu_file is not None:
+        stu_sig = uploaded_file_signature(stu_file)
+        if stu_file is not None and st.session_state.get("last_student_csv_import") != stu_sig:
             load_csv_into_editor(stu_file, "student_people_editor", add_student_requests=True)
+            st.session_state["last_student_csv_import"] = stu_sig
             st.session_state.pop("student_people_editor_widget", None)
             st.success("CSV loaded into the editable table above.")
             st.rerun()
@@ -973,8 +985,10 @@ def render_faculty_intake():
     with st.expander("Optional: import faculty from CSV", expanded=False):
         sample_download("test_faculty.csv", "Download sample faculty CSV", key="sample_faculty_download")
         fac_file = st.file_uploader("Faculty list (CSV)", type="csv", key="fac_csv")
-        if fac_file is not None:
+        fac_sig = uploaded_file_signature(fac_file)
+        if fac_file is not None and st.session_state.get("last_faculty_csv_import") != fac_sig:
             load_csv_into_editor(fac_file, "faculty_people_editor", add_faculty_ids=True)
+            st.session_state["last_faculty_csv_import"] = fac_sig
             st.session_state.pop("faculty_people_editor_widget", None)
             st.success("CSV loaded into the editable table above.")
             st.rerun()
