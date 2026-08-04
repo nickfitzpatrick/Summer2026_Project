@@ -816,7 +816,8 @@ def render_student_intake():
     step(2, "Prepare the preference form")
     guide("Build the Google Form exactly from this template", [
         "Copy question titles exactly; the response parser uses those titles to identify answers.",
-        "Set required questions as required in Google Forms; leave optional rankings optional.",
+        "Only the student's 1st choice is required; leave 2nd-8th choice questions optional.",
+        "In the Google Form or email, encourage students to list at least 3 genuine choices because backups improve scheduling flexibility.",
         "Do not rename faculty options after students have started responding.",
     ])
     spec = build_spec(ROSTER_XLSX)

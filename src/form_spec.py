@@ -17,7 +17,8 @@ import os
 from roster import load_roster, CANONICAL_AREAS
 
 TOP_N = 8  # maximum number of faculty a student can rank
-REQUIRED_RANKS = 3
+REQUIRED_RANKS = 1
+RECOMMENDED_RANKS = 3
 
 # Fixed question titles. These double as response-sheet column headers, so the
 # adapter keys off them. Do not rename without updating the adapter in lockstep.
@@ -55,9 +56,9 @@ def build_spec(roster_path: str) -> dict:
             "required": True,
             "limit": TOP_N,
             "help": (
-                f"Pick up to {TOP_N}. The scheduler uses these as ranked preferences, "
-                "but each student's max meetings requested controls how many meetings "
-                "can be assigned."
+                f"Pick at least 1 and up to {TOP_N}. If you have genuine backup preferences, "
+                f"we recommend listing at least {RECOMMENDED_RANKS} faculty because backups "
+                "improve scheduling flexibility."
             ),
         },
     ]
@@ -70,9 +71,12 @@ def build_spec(roster_path: str) -> dict:
                 "options": faculty_names,
                 "required": i <= REQUIRED_RANKS,
                 "help": (
-                    "Required for your top 3 choices."
+                    "Required: choose the faculty member you most want to meet."
                     if i <= REQUIRED_RANKS
-                    else "Optional backup choice. Leave blank if you do not have another preference."
+                    else (
+                        "Optional backup choice. Add this only if you would genuinely be "
+                        "interested in meeting this faculty member."
+                    )
                 ),
             }
         )
@@ -91,11 +95,13 @@ def build_spec(roster_path: str) -> dict:
         "title": "IEOR Visit Day - Faculty Meeting Preferences",
         "description": (
             "Tell us which faculty you would most like to meet during your visit. "
-            f"Select up to {TOP_N}, rank at least your top {REQUIRED_RANKS}, "
-            "and pick your research interests."
+            f"Rank your top choice. If you have genuine backup preferences, we recommend "
+            f"ranking at least {RECOMMENDED_RANKS} faculty, up to {TOP_N}. "
+            "Backup choices improve scheduling flexibility."
         ),
         "top_n": TOP_N,
         "required_ranks": REQUIRED_RANKS,
+        "recommended_ranks": RECOMMENDED_RANKS,
         "faculty": roster[["faculty_id", "name"]].to_dict("records"),
         "interest_areas": CANONICAL_AREAS,
         "questions": questions,
