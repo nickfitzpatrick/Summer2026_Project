@@ -1,12 +1,15 @@
 # Sample data
 
-Existing small samples:
+App download-button samples:
 
-- `test_students.csv`
-- `test_faculty.csv`
-- `test_preferences.csv`
-- `test_availability.csv`
-- `test_student_requests.csv`
+- `test_students.csv`: 40-student recipient list.
+- `test_faculty.csv`: 10-faculty scheduler roster.
+- `test_preferences.csv`: preferences for the same 40 students and 10 faculty.
+- `test_availability.csv`: availability for the same 10 faculty.
+- `test_student_requests.csv`: max-meeting requests for the same 40 students.
+
+These files use the same people as the full staff workflow test files below, so
+the in-app sample downloads and direct GitHub samples stay consistent.
 
 Full staff workflow test samples:
 
@@ -31,4 +34,5 @@ Recommended testing paths:
    - Use parsed response data in tab 5.
 
 2. Direct scheduler CSV path:
-   - In tab 5, upload `staff_test_scheduler_faculty_10.csv`, `staff_test_scheduler_availability_10.csv`, `staff_test_scheduler_preferences_40.csv`, and optionally `staff_test_scheduler_students_40.csv`.
+   - In tab 5, upload `test_faculty.csv`, `test_availability.csv`, `test_preferences.csv`, and optionally `test_student_requests.csv`.
+   - The `staff_test_scheduler_*.csv` files are equivalent, more descriptive copies for reviewers browsing the repo.

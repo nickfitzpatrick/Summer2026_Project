@@ -1,5 +1,11 @@
 faculty_id,name,area,email
-F01,Prof Ada Lee,Optimization,ada.lee@example.edu
-F02,Prof Ben Chen,Stochastic Systems,ben.chen@example.edu
-F03,Prof Carla Diaz,Machine Learning,carla.diaz@example.edu
-F04,Prof David Rao,Supply Chain,david.rao@example.edu
+F01,Ilan Adler,Optimization,faculty01@example.edu
+F02,Anil Aswani,Healthcare,faculty02@example.edu
+F03,Alper Atamturk,Optimization,faculty03@example.edu
+F04,Ying Cui,Optimization,faculty04@example.edu
+F05,Lee Fleming,Optimization,faculty05@example.edu
+F06,Ken Goldberg,Robotics,faculty06@example.edu
+F07,Paul Grigas,Optimization,faculty07@example.edu
+F08,Xin Guo,Stochastic & Probability,faculty08@example.edu
+F09,Dorit Hochbaum,Supply Chain & Logistics,faculty09@example.edu
+F10,Huiwen Jia,Stochastic & Probability,faculty10@example.edu
